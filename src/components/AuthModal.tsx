@@ -45,6 +45,18 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setCaptchaResetSignal((s) => s + 1);
   }, []);
 
+  const handleCaptchaToken = useCallback((token: string) => {
+    setCaptchaToken(token);
+  }, []);
+
+  const handleCaptchaError = useCallback(() => {
+    setCaptchaError(true);
+  }, []);
+
+  const handleCaptchaExpire = useCallback(() => {
+    setCaptchaError(true);
+  }, []);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -269,9 +281,9 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           )}
 
           <Turnstile
-            onToken={setCaptchaToken}
-            onError={() => setCaptchaError(true)}
-            onExpire={() => setCaptchaError(true)}
+            onToken={handleCaptchaToken}
+            onError={handleCaptchaError}
+            onExpire={handleCaptchaExpire}
             resetSignal={captchaResetSignal}
           />
 

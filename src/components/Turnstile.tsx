@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface TurnstileProps {
   onToken: (token: string) => void;
@@ -70,29 +70,27 @@ export function Turnstile({ onToken, onExpire, onError, resetSignal }: Turnstile
 
   const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
-  const clearToken = useCallback(() => {
-    onToken('');
+  const onTokenRef = useRef(onToken);
+  const onErrorRef = useRef(onError);
+  const onExpireRef = useRef(onExpire);
+
+  useEffect(() => {
+    onTokenRef.current = onToken;
   }, [onToken]);
 
-  const handleExpire = useCallback(() => {
-    setStatus('expired');
-    clearToken();
-    onExpire?.();
-  }, [clearToken, onExpire]);
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
-  const handleError = useCallback((errorCode: string) => {
-    console.error('Turnstile error code:', errorCode);
-    setErrorCode(errorCode);
-    setStatus('error');
-    clearToken();
-    onError?.(errorCode);
-  }, [clearToken, onError]);
+  useEffect(() => {
+    onExpireRef.current = onExpire;
+  }, [onExpire]);
 
   useEffect(() => {
     if (!siteKey) {
       setStatus('error');
       setErrorCode('missing_site_key');
-      clearToken();
+      onTokenRef.current('');
       return;
     }
 
@@ -103,27 +101,33 @@ export function Turnstile({ onToken, onExpire, onError, resetSignal }: Turnstile
       .then(() => {
         if (cancelled || !containerRef.current || !window.turnstile) return;
 
-        if (widgetIdRef.current) {
-          window.turnstile.remove(widgetIdRef.current);
-          widgetIdRef.current = null;
-        }
-
         widgetIdRef.current = window.turnstile.render(containerRef.current, {
           sitekey: siteKey,
           callback: (token: string) => {
+            console.info('Turnstile verification completed');
             setStatus('ready');
             setErrorCode(null);
-            onToken(token);
+            onTokenRef.current(token);
           },
-          'expired-callback': handleExpire,
-          'error-callback': handleError,
+          'expired-callback': () => {
+            setStatus('expired');
+            onTokenRef.current('');
+            onExpireRef.current?.();
+          },
+          'error-callback': (errCode: string) => {
+            console.error('Turnstile error code:', errCode);
+            setErrorCode(errCode);
+            setStatus('error');
+            onTokenRef.current('');
+            onErrorRef.current?.(errCode);
+          },
           theme: 'light',
         });
       })
       .catch(() => {
         if (!cancelled) {
           setStatus('error');
-          clearToken();
+          onTokenRef.current('');
         }
       });
 
@@ -134,17 +138,21 @@ export function Turnstile({ onToken, onExpire, onError, resetSignal }: Turnstile
         widgetIdRef.current = null;
       }
     };
-  }, [siteKey, onToken, handleExpire, handleError, clearToken]);
+  }, [siteKey]);
 
+  const firstResetRef = useRef(true);
   useEffect(() => {
-    if (resetSignal === undefined || resetSignal === 0) return;
+    if (firstResetRef.current) {
+      firstResetRef.current = false;
+      return;
+    }
     if (widgetIdRef.current && window.turnstile) {
       window.turnstile.reset(widgetIdRef.current);
       setStatus('loading');
       setErrorCode(null);
-      clearToken();
+      onTokenRef.current('');
     }
-  }, [resetSignal, clearToken]);
+  }, [resetSignal]);
 
   if (!siteKey) {
     return (
