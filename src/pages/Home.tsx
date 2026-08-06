@@ -10,11 +10,11 @@ interface HomeProps {
 }
 
 const categoryImages: Record<string, string> = {
-  'ALEKS Universidad': '/whatsapp_image_2025-12-23_at_4.50.25_pm_(2) copy.jpeg',
-  'ALEKS Preparatoria': '/whatsapp_image_2025-12-23_at_4.50.25_pm_(2) copy.jpeg',
-  'CAMBRIDGE ONE': '/whatsapp_image_2025-12-23_at_4.50.25_pm_(1).jpeg',
-  'Coursera Excel': '/whatsapp_image_2025-12-23_at_4.50.25_pm.jpeg',
-  'National Geographic Learning': '/image.png',
+  'ALEKS Universidad': '/images/categories/aleks-universidad.webp',
+  'ALEKS Preparatoria': '/images/categories/aleks-preparatoria.webp',
+  'CAMBRIDGE ONE': '/images/categories/cambridge-one.webp',
+  'Coursera Excel': '/images/categories/coursera-excel.webp',
+  'National Geographic Learning': '/images/categories/national-geographic-learning.webp',
 };
 
 export function Home({ onOpenAuth }: HomeProps) {
@@ -91,12 +91,27 @@ export function Home({ onOpenAuth }: HomeProps) {
             <section key={category.id} className="mb-20">
               <div className={`flex flex-col ${isEven ? 'lg:flex-row' : 'lg:flex-row-reverse'} gap-8 items-center bg-white rounded-2xl shadow-lg overflow-hidden`}>
                 <div className="lg:w-1/2">
-                  {categoryImage && (
+                  {categoryImage ? (
                     <img
                       src={categoryImage}
                       alt={category.name}
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        img.style.display = 'none';
+                        const fallback = img.nextElementSibling;
+                        if (fallback) fallback.classList.remove('hidden');
+                      }}
                       className="w-full h-80 object-cover"
                     />
+                  ) : (
+                    <div className="w-full h-80 bg-gray-200 flex items-center justify-center">
+                      <span className="text-gray-500 text-lg font-medium text-center px-4">{category.name}</span>
+                    </div>
+                  )}
+                  {categoryImage && (
+                    <div className="hidden w-full h-80 bg-gray-200 flex items-center justify-center">
+                      <span className="text-gray-500 text-lg font-medium text-center px-4">{category.name}</span>
+                    </div>
                   )}
                 </div>
 
