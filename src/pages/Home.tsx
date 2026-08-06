@@ -90,7 +90,7 @@ export function Home({ onOpenAuth }: HomeProps) {
           return (
             <section key={category.id} className="mb-20">
               <div className={`flex flex-col ${isEven ? 'lg:flex-row' : 'lg:flex-row-reverse'} gap-8 items-center bg-white rounded-2xl shadow-lg overflow-hidden`}>
-                <div className="lg:w-1/2">
+                <div className="lg:w-1/2 flex items-center justify-center bg-gray-50 p-8 h-80">
                   {categoryImage ? (
                     <img
                       src={categoryImage}
@@ -101,17 +101,13 @@ export function Home({ onOpenAuth }: HomeProps) {
                         const fallback = img.nextElementSibling;
                         if (fallback) fallback.classList.remove('hidden');
                       }}
-                      className="w-full h-80 object-cover"
+                      className="max-w-full max-h-full object-contain"
                     />
                   ) : (
-                    <div className="w-full h-80 bg-gray-200 flex items-center justify-center">
-                      <span className="text-gray-500 text-lg font-medium text-center px-4">{category.name}</span>
-                    </div>
+                    <span className="text-gray-500 text-lg font-medium text-center px-4">{category.name}</span>
                   )}
                   {categoryImage && (
-                    <div className="hidden w-full h-80 bg-gray-200 flex items-center justify-center">
-                      <span className="text-gray-500 text-lg font-medium text-center px-4">{category.name}</span>
-                    </div>
+                    <span className="hidden text-gray-500 text-lg font-medium text-center px-4">{category.name}</span>
                   )}
                 </div>
 
