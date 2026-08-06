@@ -8,6 +8,17 @@ interface AuthModalProps {
   onClose: () => void;
 }
 
+const GENERIC_SIGN_IN_ERROR = 'Correo o contraseña incorrectos.';
+const GENERIC_SIGN_UP_ERROR =
+  'No pudimos completar el registro en este momento. Inténtalo de nuevo en unos minutos.';
+const GENERIC_RESET_ERROR =
+  'No pudimos procesar la solicitud en este momento. Inténtalo de nuevo en unos minutos.';
+// Respuestas idénticas exista o no la cuenta, para no revelar qué correos están registrados.
+const NEUTRAL_RESET_MESSAGE =
+  'Si ese correo tiene una cuenta, te enviamos instrucciones para restablecer tu contraseña.';
+const NEUTRAL_SIGN_UP_MESSAGE =
+  'Revisa tu correo para continuar. Si ya tenías una cuenta con ese correo, inicia sesión.';
+
 export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -36,15 +47,17 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
         });
 
         if (error) {
-          setError(error.message);
+          console.error('Error al solicitar el restablecimiento:', error);
+          setError(GENERIC_RESET_ERROR);
         } else {
-          setSuccessMessage('Te hemos enviado un correo con instrucciones para restablecer tu contraseña.');
+          setSuccessMessage(NEUTRAL_RESET_MESSAGE);
           setEmail('');
         }
       } else if (isLogin) {
         const { error } = await signIn(email, password);
         if (error) {
-          setError(error.message);
+          console.error('Error al iniciar sesión:', error);
+          setError(GENERIC_SIGN_IN_ERROR);
         } else {
           onClose();
           resetForm();
@@ -57,14 +70,24 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
         });
 
         if (error) {
-          setError(error.message);
+          console.error('Error al crear la cuenta:', error);
+          // "User already registered" permitiría enumerar cuentas: respondemos igual
+          // que en un registro correcto pendiente de confirmación.
+          const alreadyRegistered =
+            typeof error.message === 'string' &&
+            /already\s*registered|already\s*exists|user\s*exists/i.test(error.message);
+
+          if (alreadyRegistered) {
+            setSuccessMessage(NEUTRAL_SIGN_UP_MESSAGE);
+            setPassword('');
+          } else {
+            setError(GENERIC_SIGN_UP_ERROR);
+          }
         } else if (createdUser && createdSession) {
           onClose();
           resetForm();
-        } else if (createdUser) {
-          setSuccessMessage(
-            'Cuenta creada. Revisa tu correo para confirmar el registro antes de iniciar sesión.',
-          );
+        } else {
+          setSuccessMessage(NEUTRAL_SIGN_UP_MESSAGE);
           setPassword('');
         }
       }

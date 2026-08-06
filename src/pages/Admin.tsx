@@ -28,6 +28,13 @@ type NewService = {
   categoryId: string;
 };
 
+// Los mensajes del motor de base de datos exponen nombres de tablas, restricciones
+// y políticas, así que se registran en la consola y en pantalla se muestra un texto fijo.
+function reportError(context: string, detail: unknown): string {
+  console.error(`${context}:`, detail);
+  return `${context}. Inténtalo de nuevo o recarga el panel.`;
+}
+
 const emptyService: NewService = {
   name: '',
   description: '',
@@ -67,7 +74,7 @@ export function Admin() {
       categoriesResult.error || servicesResult.error || ordersResult.error || messagesResult.error;
 
     if (firstError) {
-      setError(firstError.message);
+      setError(reportError('No se pudieron cargar los datos del panel', firstError));
       setLoading(false);
       return;
     }
@@ -147,7 +154,7 @@ export function Admin() {
       .single();
 
     if (insertError) {
-      setError(insertError.message);
+      setError(reportError('No se pudo crear la categoría', insertError));
     } else if (data) {
       setCategories((current) => [...current, data].sort((a, b) => a.name.localeCompare(b.name)));
       setNewService((current) => ({ ...current, categoryId: current.categoryId || data.id }));
@@ -184,7 +191,7 @@ export function Admin() {
       .single();
 
     if (insertError) {
-      setError(insertError.message);
+      setError(reportError('No se pudo crear el servicio', insertError));
     } else if (data) {
       setServices((current) => [{ ...data, draftPrice: String(data.price) }, ...current]);
       setNewService({ ...emptyService, categoryId: newService.categoryId });
@@ -217,7 +224,7 @@ export function Admin() {
       .single();
 
     if (updateError) {
-      setError(updateError.message);
+      setError(reportError('No se pudo guardar el servicio', updateError));
     } else if (data) {
       setServices((current) =>
         current.map((item) =>
@@ -245,7 +252,7 @@ export function Admin() {
     const { error: deleteError } = await supabase.from('services').delete().eq('id', service.id);
 
     if (deleteError) {
-      setError(deleteError.message);
+      setError(reportError('No se pudo eliminar el servicio', deleteError));
     } else {
       setServices((current) => current.filter((item) => item.id !== service.id));
       await logAction('delete', 'services', service.id, { name: service.name });
@@ -265,7 +272,7 @@ export function Admin() {
       .single();
 
     if (updateError) {
-      setError(updateError.message);
+      setError(reportError('No se pudo actualizar el estado de la orden', updateError));
     } else if (data) {
       setOrders((current) => current.map((item) => (item.id === data.id ? data : item)));
       await logAction('status_change', 'orders', data.id, {
@@ -298,7 +305,7 @@ export function Admin() {
       .single();
 
     if (updateError) {
-      setError(updateError.message);
+      setError(reportError('No se pudo guardar la respuesta', updateError));
     } else if (data) {
       setMessages((current) => current.map((item) => (item.id === data.id ? data : item)));
       await logAction('respond', 'support_messages', data.id, { status: data.status });

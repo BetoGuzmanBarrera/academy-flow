@@ -62,6 +62,10 @@ Esta entrega crea una base más segura, pero todavía no debe considerarse lista
 - El cambio manual de una orden a `completed` es provisional; cuando se integre Stripe, debe hacerlo un webhook validado.
 - CFDI todavía almacena datos fiscales, pero no genera ni timbra una factura real.
 - El formulario público de soporte todavía necesita CAPTCHA o rate limiting.
+- Pendiente de configuración en el panel de Supabase (no puede hacerse desde el código):
+  en Authentication → Passwords, subir la longitud mínima de contraseña (8 o más) y
+  activar "Leaked password protection" (verificación contra HaveIBeenPwned). Hoy el
+  mínimo de 6 caracteres solo se valida en el navegador.
 
 ## Archivos principales modificados
 

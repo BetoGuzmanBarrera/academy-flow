@@ -11,6 +11,21 @@ interface CheckoutProps {
   onComplete: () => void;
 }
 
+const GENERIC_ORDER_ERROR =
+  'No pudimos registrar tu orden en este momento. Revisa tu carrito e inténtalo de nuevo.';
+
+// Solo mostramos los mensajes de validación que la propia función de checkout
+// genera (SQLSTATE P0001). Cualquier otro error interno se registra en la
+// consola y el cliente ve un mensaje genérico.
+function friendlyOrderError(err: unknown): string {
+  if (err && typeof err === 'object' && 'code' in err) {
+    const { code, message } = err as { code?: string; message?: string };
+    if (code === 'P0001' && message) return message;
+  }
+
+  return GENERIC_ORDER_ERROR;
+}
+
 export function Checkout({ onBack, onComplete }: CheckoutProps) {
   const { items, totalAmount, clearCart } = useCart();
   const { user } = useAuth();
@@ -184,8 +199,8 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
         onComplete();
       }, 2500);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Ocurrió un error al crear la orden';
-      setError(message);
+      console.error('No se pudo crear la orden:', err);
+      setError(friendlyOrderError(err));
     } finally {
       setLoading(false);
     }
