@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { X, Mail, Lock, User, Calendar } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { Turnstile } from './Turnstile';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -30,12 +31,30 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaResetSignal, setCaptchaResetSignal] = useState(0);
+  const [captchaError, setCaptchaError] = useState(false);
   const { signIn, signUp } = useAuth();
+
+  const hasSiteKey = Boolean(import.meta.env.VITE_TURNSTILE_SITE_KEY);
+  const captchaValid = hasSiteKey && captchaToken.length > 0 && !captchaError;
+
+  const resetCaptcha = useCallback(() => {
+    setCaptchaToken('');
+    setCaptchaError(false);
+    setCaptchaResetSignal((s) => s + 1);
+  }, []);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (hasSiteKey && !captchaValid) {
+      setError('Debes completar el CAPTCHA para continuar.');
+      return;
+    }
+
     setError('');
     setSuccessMessage('');
     setLoading(true);
@@ -44,6 +63,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       if (isForgotPassword) {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}?reset-password=true`,
+          captchaToken,
         });
 
         if (error) {
@@ -54,7 +74,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           setEmail('');
         }
       } else if (isLogin) {
-        const { error } = await signIn(email, password);
+        const { error } = await signIn(email, password, { captchaToken });
         if (error) {
           console.error('Error al iniciar sesión:', error);
           setError(GENERIC_SIGN_IN_ERROR);
@@ -63,16 +83,15 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           resetForm();
         }
       } else {
-        const { user: createdUser, session: createdSession, error } = await signUp(email, password, {
-          firstName,
-          lastName,
-          birthDate,
-        });
+        const { user: createdUser, session: createdSession, error } = await signUp(
+          email,
+          password,
+          { firstName, lastName, birthDate },
+          { captchaToken },
+        );
 
         if (error) {
           console.error('Error al crear la cuenta:', error);
-          // "User already registered" permitiría enumerar cuentas: respondemos igual
-          // que en un registro correcto pendiente de confirmación.
           const alreadyRegistered =
             typeof error.message === 'string' &&
             /already\s*registered|already\s*exists|user\s*exists/i.test(error.message);
@@ -95,6 +114,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setError('Ocurrió un error inesperado');
     } finally {
       setLoading(false);
+      resetCaptcha();
     }
   };
 
@@ -248,6 +268,13 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             </div>
           )}
 
+          <Turnstile
+            onToken={setCaptchaToken}
+            onError={() => setCaptchaError(true)}
+            onExpire={() => setCaptchaError(true)}
+            resetSignal={captchaResetSignal}
+          />
+
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
               {error}
@@ -262,7 +289,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (hasSiteKey && !captchaValid)}
             className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-blue-400"
           >
             {loading
@@ -282,6 +309,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 setIsForgotPassword(false);
                 setIsLogin(true);
                 resetForm();
+                resetCaptcha();
               }}
               className="text-blue-600 hover:text-blue-700 text-sm font-medium"
             >
@@ -293,6 +321,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 setIsLogin(!isLogin);
                 setIsForgotPassword(false);
                 resetForm();
+                resetCaptcha();
               }}
               className="text-blue-600 hover:text-blue-700 text-sm font-medium"
             >

@@ -13,6 +13,10 @@ interface AuthResult {
   error: Error | null;
 }
 
+interface AuthOptions {
+  captchaToken?: string;
+}
+
 interface SignUpResult extends AuthResult {
   user: User | null;
   session: Session | null;
@@ -24,8 +28,8 @@ interface AuthContextType {
   profile: Profile | null;
   isAdmin: boolean;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<AuthResult>;
-  signUp: (email: string, password: string, profile: SignUpProfile) => Promise<SignUpResult>;
+  signIn: (email: string, password: string, options?: AuthOptions) => Promise<AuthResult>;
+  signUp: (email: string, password: string, profile: SignUpProfile, options?: AuthOptions) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -102,8 +106,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = async (email: string, password: string): Promise<AuthResult> => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const signIn = async (
+    email: string,
+    password: string,
+    options?: AuthOptions,
+  ): Promise<AuthResult> => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: options?.captchaToken
+        ? { captchaToken: options.captchaToken }
+        : undefined,
+    });
     return { error };
   };
 
@@ -111,16 +125,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     profileData: SignUpProfile,
+    options?: AuthOptions,
   ): Promise<SignUpResult> => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo: window.location.origin,
         data: {
           first_name: profileData.firstName.trim(),
           last_name: profileData.lastName.trim(),
           birth_date: profileData.birthDate || null,
         },
+        ...(options?.captchaToken ? { captchaToken: options.captchaToken } : {}),
       },
     });
 
