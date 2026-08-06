@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 interface TurnstileProps {
   onToken: (token: string) => void;
   onExpire?: () => void;
-  onError?: () => void;
+  onError?: (errorCode: string) => void;
   resetSignal?: number;
 }
 
@@ -11,7 +11,7 @@ interface TurnstileRenderOptions {
   sitekey: string;
   callback: (token: string) => void;
   'expired-callback'?: () => void;
-  'error-callback'?: () => void;
+  'error-callback'?: (errorCode: string) => void;
   theme?: 'light' | 'dark' | 'auto';
 }
 
@@ -66,6 +66,7 @@ export function Turnstile({ onToken, onExpire, onError, resetSignal }: Turnstile
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'expired'>('loading');
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
@@ -79,15 +80,18 @@ export function Turnstile({ onToken, onExpire, onError, resetSignal }: Turnstile
     onExpire?.();
   }, [clearToken, onExpire]);
 
-  const handleError = useCallback(() => {
+  const handleError = useCallback((errorCode: string) => {
+    console.error('Turnstile error code:', errorCode);
+    setErrorCode(errorCode);
     setStatus('error');
     clearToken();
-    onError?.();
+    onError?.(errorCode);
   }, [clearToken, onError]);
 
   useEffect(() => {
     if (!siteKey) {
       setStatus('error');
+      setErrorCode('missing_site_key');
       clearToken();
       return;
     }
@@ -108,6 +112,7 @@ export function Turnstile({ onToken, onExpire, onError, resetSignal }: Turnstile
           sitekey: siteKey,
           callback: (token: string) => {
             setStatus('ready');
+            setErrorCode(null);
             onToken(token);
           },
           'expired-callback': handleExpire,
@@ -136,6 +141,7 @@ export function Turnstile({ onToken, onExpire, onError, resetSignal }: Turnstile
     if (widgetIdRef.current && window.turnstile) {
       window.turnstile.reset(widgetIdRef.current);
       setStatus('loading');
+      setErrorCode(null);
       clearToken();
     }
   }, [resetSignal, clearToken]);
@@ -161,7 +167,7 @@ export function Turnstile({ onToken, onExpire, onError, resetSignal }: Turnstile
       )}
       {status === 'error' && (
         <p className="text-xs text-red-600 mt-1">
-          No se pudo cargar el CAPTCHA. Recarga la página e inténtalo de nuevo.
+          No se pudo cargar el CAPTCHA (código: {errorCode ?? 'desconocido'}). Recarga la página e inténtalo de nuevo.
         </p>
       )}
     </div>
