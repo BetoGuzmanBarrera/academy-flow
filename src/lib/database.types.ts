@@ -479,10 +479,7 @@ export interface Database {
         Args: Record<PropertyKey, never>;
         Returns: number;
       };
-      get_encryption_key: {
-        Args: Record<PropertyKey, never>;
-        Returns: string;
-      };
+
       generate_referral_code: {
         Args: { user_id_param: string };
         Returns: string;

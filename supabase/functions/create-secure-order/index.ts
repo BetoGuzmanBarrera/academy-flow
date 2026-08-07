@@ -28,12 +28,8 @@ function jsonError(message: string, status = 400, origin: string | null = null):
   });
 }
 
-async function getEncryptionKey(adminClient: ReturnType<typeof createClient>): Promise<CryptoKey> {
-  const { data, error } = await adminClient.rpc('get_encryption_key').single();
-  if (error || !data) {
-    throw new Error('Encryption key not configured');
-  }
-  const keyHex = data as string;
+async function getEncryptionKey(): Promise<CryptoKey> {
+  const keyHex = Deno.env.get('CREDENTIALS_ENCRYPTION_KEY_V1');
   if (!keyHex || keyHex.length !== 64) {
     throw new Error('Encryption key not configured');
   }
@@ -119,7 +115,7 @@ Deno.serve(async (req: Request) => {
       auth: { persistSession: false },
     });
 
-    const key = await getEncryptionKey(adminClient);
+    const key = await getEncryptionKey();
     const orderId = crypto.randomUUID();
 
     const encryptedCredentials: EncryptedCredential[] = [];

@@ -20,12 +20,8 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-async function getEncryptionKey(adminClient: ReturnType<typeof createClient>): Promise<CryptoKey> {
-  const { data, error } = await adminClient.rpc('get_encryption_key').single();
-  if (error || !data) {
-    throw new Error('Encryption key not configured');
-  }
-  const keyHex = data as string;
+async function getEncryptionKey(): Promise<CryptoKey> {
+  const keyHex = Deno.env.get('CREDENTIALS_ENCRYPTION_KEY_V1');
   if (!keyHex || keyHex.length !== 64) {
     throw new Error('Encryption key not configured');
   }
@@ -177,7 +173,7 @@ Deno.serve(async (req: Request) => {
     }
 
     try {
-      const key = await getEncryptionKey(adminClient);
+      const key = await getEncryptionKey();
       const iv = base64ToBytes(cred.encryption_iv);
       const ciphertext = base64ToBytes(cred.encrypted_payload);
 
