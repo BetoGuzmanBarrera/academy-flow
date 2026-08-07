@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Package, Calendar, DollarSign, CreditCard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { ServiceDetails } from '../components/ServiceDetails';
 import type { Order, OrderItem, Service } from '../lib/database.types';
 
 interface OrderWithItems extends Order {
@@ -37,7 +38,7 @@ export function Orders() {
             .from('order_items')
             .select(`
               *,
-              service:services(*)
+              service:services(*, category:categories(*))
             `)
             .eq('order_id', order.id);
 
@@ -151,12 +152,19 @@ export function Orders() {
                   {order.items.map((item) => (
                     <div
                       key={item.id}
-                      className="flex justify-between items-center py-3 border-b last:border-b-0"
+                      className="flex justify-between items-start py-3 border-b last:border-b-0"
                     >
                       <div className="flex-1">
                         <p className="font-semibold text-gray-900">
                           {item.service.name}
                         </p>
+                        <div className="my-1">
+                          <ServiceDetails
+                            serviceName={item.service.name}
+                            categoryName={(item.service as any).category?.name ?? ''}
+                            details={item.details}
+                          />
+                        </div>
                         <p className="text-sm text-gray-600">
                           ${item.unit_price.toFixed(2)} × {item.quantity}
                         </p>

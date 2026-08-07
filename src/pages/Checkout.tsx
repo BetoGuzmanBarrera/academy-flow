@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { CreditCard, ArrowLeft, CheckCircle, Tag, X } from 'lucide-react';
+import { CreditCard, ArrowLeft, CheckCircle, Tag, X, AlertCircle } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { CredentialsForm, CredentialData } from '../components/CredentialsForm';
+import { ServiceDetails } from '../components/ServiceDetails';
+import { hasValidDetails } from '../lib/serviceCustomization';
 import type { Category } from '../lib/database.types';
 
 interface CheckoutProps {
@@ -268,7 +270,7 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
 
             return (
               <CredentialsForm
-                key={item.service_id}
+                key={item.id}
                 service={item.service}
                 category={category}
                 onSubmit={(creds) => handleCredentialsSubmit(item.service_id, creds)}
@@ -276,9 +278,18 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
             );
           })}
 
+          {!items.every((item) =>
+            hasValidDetails(item.service.name, categories[item.service.category_id]?.name ?? '', item.details),
+          ) && (
+            <div className="flex items-center gap-2 text-amber-600 text-sm mb-3">
+              <AlertCircle size={16} />
+              <span>Completa los datos de personalización para todos los servicios antes de continuar</span>
+            </div>
+          )}
+
           <button
             onClick={() => setStep('payment')}
-            disabled={!allCredentialsProvided()}
+            disabled={!allCredentialsProvided() || !items.every((item) => hasValidDetails(item.service.name, categories[item.service.category_id]?.name ?? '', item.details))}
             className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             Continuar a Confirmación
@@ -291,14 +302,21 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
 
             <div className="bg-gray-50 rounded-lg p-6 space-y-4">
               {items.map((item) => (
-                <div key={item.id} className="flex justify-between items-center">
-                  <div>
+                <div key={item.id} className="flex justify-between items-start">
+                  <div className="flex-1">
                     <p className="font-semibold text-gray-900">{item.service.name}</p>
+                    <div className="my-1">
+                      <ServiceDetails
+                        serviceName={item.service.name}
+                        categoryName={categories[item.service.category_id]?.name ?? ''}
+                        details={item.details}
+                      />
+                    </div>
                     <p className="text-sm text-gray-600">
                       ${item.service.price.toFixed(2)} × {item.quantity}
                     </p>
                   </div>
-                  <p className="font-bold text-blue-600">
+                  <p className="font-bold text-blue-600 ml-4">
                     ${(item.service.price * item.quantity).toFixed(2)}
                   </p>
                 </div>

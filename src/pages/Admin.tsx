@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { ServiceDetails } from '../components/ServiceDetails';
 import type { Category, Json, Order, Service, SupportMessage } from '../lib/database.types';
 
 type AdminTab = 'dashboard' | 'services' | 'orders' | 'support';
@@ -66,7 +67,13 @@ export function Admin() {
     const [categoriesResult, servicesResult, ordersResult, messagesResult] = await Promise.all([
       supabase.from('categories').select('*').order('name'),
       supabase.from('services').select('*').order('created_at', { ascending: false }),
-      supabase.from('orders').select('*').order('created_at', { ascending: false }),
+      supabase.from('orders').select(`
+        *,
+        items:order_items(
+          *,
+          service:services(*, category:categories(*))
+        )
+      `).order('created_at', { ascending: false }),
       supabase.from('support_messages').select('*').order('created_at', { ascending: false }),
     ]);
 
@@ -589,6 +596,7 @@ export function Admin() {
                     <th className="p-4">Orden</th>
                     <th className="p-4">Usuario</th>
                     <th className="p-4">Fecha</th>
+                    <th className="p-4">Servicios</th>
                     <th className="p-4">Total</th>
                     <th className="p-4">Método</th>
                     <th className="p-4">Estado</th>
@@ -596,10 +604,22 @@ export function Admin() {
                 </thead>
                 <tbody>
                   {orders.map((order) => (
-                    <tr key={order.id} className="border-t">
+                    <tr key={order.id} className="border-t align-top">
                       <td className="p-4 font-mono">#{order.id.slice(0, 8)}</td>
                       <td className="p-4 font-mono text-xs">{order.user_id.slice(0, 8)}…</td>
                       <td className="p-4">{new Date(order.created_at).toLocaleString('es-MX')}</td>
+                      <td className="p-4">
+                        {(order as any).items?.map((item: any) => (
+                          <div key={item.id} className="mb-2 last:mb-0">
+                            <p className="font-medium text-sm">{item.service?.name}</p>
+                            <ServiceDetails
+                              serviceName={item.service?.name ?? ''}
+                              categoryName={(item.service as any)?.category?.name ?? ''}
+                              details={item.details}
+                            />
+                          </div>
+                        ))}
+                      </td>
                       <td className="p-4 font-semibold">${Number(order.total_amount).toFixed(2)}</td>
                       <td className="p-4 capitalize">{order.payment_method}</td>
                       <td className="p-4">

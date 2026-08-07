@@ -3,7 +3,9 @@ import { ShoppingCart, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
+import { ServiceCustomizationModal } from '../components/ServiceCustomizationModal';
 import type { Category, Service } from '../lib/database.types';
+import type { ServiceDetails as ServiceDetailsType } from '../lib/serviceCustomization';
 
 interface HomeProps {
   onOpenAuth: () => void;
@@ -22,6 +24,9 @@ export function Home({ onOpenAuth }: HomeProps) {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [addedItems, setAddedItems] = useState<Set<string>>(new Set());
+  const [modalService, setModalService] = useState<Service | null>(null);
+  const [modalCategory, setModalCategory] = useState<Category | null>(null);
+  const [modalMessage, setModalMessage] = useState<string | null>(null);
   const { addToCart } = useCart();
   const { user } = useAuth();
 
@@ -40,21 +45,45 @@ export function Home({ onOpenAuth }: HomeProps) {
     setLoading(false);
   };
 
-  const handleAddToCart = async (serviceId: string) => {
+  const handleAddClick = (service: Service) => {
     if (!user) {
       onOpenAuth();
       return;
     }
 
-    await addToCart(serviceId);
-    setAddedItems(prev => new Set(prev).add(serviceId));
-    setTimeout(() => {
-      setAddedItems(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(serviceId);
-        return newSet;
-      });
-    }, 2000);
+    const category = categories.find((c) => c.id === service.category_id);
+    if (!category) return;
+
+    setModalMessage(null);
+    setModalService(service);
+    setModalCategory(category);
+  };
+
+  const handleModalConfirm = async (details: ServiceDetailsType, quantity: number) => {
+    if (!modalService || !modalCategory) return;
+
+    const result = await addToCart(
+      modalService.id,
+      modalService.name,
+      modalCategory.name,
+      details,
+      quantity,
+    );
+
+    if (result.success) {
+      setAddedItems(prev => new Set(prev).add(modalService.id));
+      setTimeout(() => {
+        setAddedItems(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(modalService.id);
+          return newSet;
+        });
+      }, 2000);
+      setModalService(null);
+      setModalCategory(null);
+    } else {
+      setModalMessage(result.message ?? 'No se pudo agregar al carrito');
+    }
   };
 
   if (loading) {
@@ -140,7 +169,7 @@ export function Home({ onOpenAuth }: HomeProps) {
                             </div>
 
                             <button
-                              onClick={() => handleAddToCart(service.id)}
+                              onClick={() => handleAddClick(service)}
                               disabled={isAdded}
                               className={`${
                                 isAdded
@@ -171,6 +200,26 @@ export function Home({ onOpenAuth }: HomeProps) {
           );
         })}
       </div>
+
+      {modalService && modalCategory && (
+        <ServiceCustomizationModal
+          service={modalService}
+          category={modalCategory}
+          mode="add"
+          onConfirm={handleModalConfirm}
+          onClose={() => {
+            setModalService(null);
+            setModalCategory(null);
+            setModalMessage(null);
+          }}
+        />
+      )}
+
+      {modalMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-amber-50 border border-amber-300 text-amber-800 px-6 py-3 rounded-lg shadow-lg">
+          {modalMessage}
+        </div>
+      )}
     </div>
   );
 }

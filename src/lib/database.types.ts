@@ -66,6 +66,7 @@ export interface Database {
           user_id: string;
           service_id: string;
           quantity: number;
+          details: Json;
           created_at: string;
         };
         Insert: {
@@ -73,6 +74,7 @@ export interface Database {
           user_id: string;
           service_id: string;
           quantity?: number;
+          details?: Json;
           created_at?: string;
         };
         Update: {
@@ -80,6 +82,7 @@ export interface Database {
           user_id?: string;
           service_id?: string;
           quantity?: number;
+          details?: Json;
           created_at?: string;
         };
         Relationships: [];
@@ -127,6 +130,7 @@ export interface Database {
           service_id: string;
           quantity: number;
           unit_price: number;
+          details: Json;
           created_at: string;
         };
         Insert: {
@@ -135,6 +139,7 @@ export interface Database {
           service_id: string;
           quantity: number;
           unit_price: number;
+          details?: Json;
           created_at?: string;
         };
         Update: {
@@ -143,6 +148,7 @@ export interface Database {
           service_id?: string;
           quantity?: number;
           unit_price?: number;
+          details?: Json;
           created_at?: string;
         };
         Relationships: [];
