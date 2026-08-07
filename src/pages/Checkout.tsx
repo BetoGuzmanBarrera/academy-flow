@@ -206,6 +206,11 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
       const result = await response.json();
 
       if (!response.ok) {
+        if (result?.diagnostic) {
+          throw new Error(
+            `[${result.stage}] code=${result.code ?? 'null'} — ${result.message}`,
+          );
+        }
         throw new Error(result?.error || GENERIC_ORDER_ERROR);
       }
 

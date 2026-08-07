@@ -28,6 +28,25 @@ function jsonError(message: string, status = 400, origin: string | null = null):
   });
 }
 
+function diagnosticError(
+  stage: 'auth' | 'validation' | 'encryption' | 'rpc' | 'response',
+  code: string | null,
+  message: string,
+  origin: string | null,
+  status = 400,
+): Response {
+  return new Response(JSON.stringify({
+    diagnostic: true,
+    stage,
+    code,
+    message,
+    requestId: null,
+  }), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) },
+  });
+}
+
 async function getEncryptionKey(): Promise<CryptoKey> {
   const keyHex = Deno.env.get('CREDENTIALS_ENCRYPTION_KEY_V1');
   if (!keyHex || keyHex.length !== 64) {
@@ -75,7 +94,7 @@ Deno.serve(async (req: Request) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      return jsonError('Unauthorized', 401, origin);
+      return diagnosticError('auth', null, 'Missing or invalid auth header', origin, 401);
     }
     const jwt = authHeader.substring(7);
 
@@ -90,13 +109,13 @@ Deno.serve(async (req: Request) => {
 
     const { data: userData, error: userError } = await userClient.auth.getUser();
     if (userError || !userData.user) {
-      return jsonError('Unauthorized', 401, origin);
+      return diagnosticError('auth', null, 'JWT validation failed', origin, 401);
     }
     const userId = userData.user.id;
 
     const body = await req.json();
     if (!body || typeof body !== 'object') {
-      return jsonError('Invalid request body', 400, origin);
+      return diagnosticError('validation', null, 'Invalid request body', origin);
     }
 
     const paymentMethod = body.paymentMethod;
@@ -105,17 +124,23 @@ Deno.serve(async (req: Request) => {
     const billing = body.billing ?? null;
 
     if (!paymentMethod || !['card', 'paypal'].includes(paymentMethod)) {
-      return jsonError('Invalid payment method', 400, origin);
+      return diagnosticError('validation', null, 'Invalid payment method', origin);
     }
     if (!Array.isArray(rawCredentials) || rawCredentials.length === 0) {
-      return jsonError('No credentials provided', 400, origin);
+      return diagnosticError('validation', null, 'No credentials provided', origin);
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
     });
 
-    const key = await getEncryptionKey();
+    let key: CryptoKey;
+    try {
+      key = await getEncryptionKey();
+    } catch {
+      return diagnosticError('encryption', null, 'Encryption key unavailable', origin);
+    }
+
     const orderId = crypto.randomUUID();
 
     const encryptedCredentials: EncryptedCredential[] = [];
@@ -123,14 +148,19 @@ Deno.serve(async (req: Request) => {
 
     for (const cred of rawCredentials) {
       if (!cred.service_id || typeof cred.service_id !== 'string') {
-        return jsonError('Invalid service_id in credentials', 400, origin);
+        return diagnosticError('validation', null, 'Invalid service_id in credentials', origin);
       }
       if (seenServiceIds.has(cred.service_id)) {
-        return jsonError('Duplicate credentials for the same service', 400, origin);
+        return diagnosticError('validation', null, 'Duplicate credentials for the same service', origin);
       }
       seenServiceIds.add(cred.service_id);
 
-      const validated = validatePlaintext(cred);
+      let validated: ReturnType<typeof validatePlaintext>;
+      try {
+        validated = validatePlaintext(cred);
+      } catch (err) {
+        return diagnosticError('validation', null, (err as Error).message, origin);
+      }
       const credentialId = crypto.randomUUID();
 
       const plaintext = JSON.stringify({
@@ -148,16 +178,21 @@ Deno.serve(async (req: Request) => {
         key_version: KEY_VERSION,
       });
 
-      const ciphertextBuf = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv, additionalData: aad },
-        key,
-        new TextEncoder().encode(plaintext),
-      );
+      let ciphertextBuf: ArrayBuffer;
+      try {
+        ciphertextBuf = await crypto.subtle.encrypt(
+          { name: 'AES-GCM', iv, additionalData: aad },
+          key,
+          new TextEncoder().encode(plaintext),
+        );
+      } catch {
+        return diagnosticError('encryption', null, 'AES-GCM encryption failed', origin);
+      }
 
       const ciphertextBytes = new Uint8Array(ciphertextBuf);
       const encryptedPayload = bytesToBase64(ciphertextBytes);
       if (encryptedPayload.length > MAX_CIPHERTEXT_BASE64) {
-        return jsonError('Encrypted payload too large', 400, origin);
+        return diagnosticError('encryption', null, 'Encrypted payload too large', origin);
       }
 
       encryptedCredentials.push({
@@ -180,12 +215,9 @@ Deno.serve(async (req: Request) => {
 
     if (rpcError) {
       console.error('RPC error:', rpcError.code, rpcError.message);
-      return new Response(JSON.stringify({
-        error: `DIAGNOSTIC RPC: code=${rpcError.code} msg=${rpcError.message}`,
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) },
-      });
+      const safeCode = rpcError.code ?? null;
+      const safeMessage = rpcError.code === 'P0001' ? rpcError.message : 'Order could not be created';
+      return diagnosticError('rpc', safeCode, safeMessage, origin);
     }
 
     return new Response(JSON.stringify({
@@ -197,9 +229,8 @@ Deno.serve(async (req: Request) => {
       headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) },
     });
   } catch (err) {
-    const errMsg = (err as Error).message;
-    const errStack = (err as Error).stack?.split('\n')[1]?.trim() ?? '';
-    console.error('create-secure-order error:', errMsg, errStack);
-    return jsonError(`DIAGNOSTIC: ${errMsg} | ${errStack}`, 500, origin);
+    const errName = (err as Error).name ?? 'Error';
+    console.error('create-secure-order error:', errName);
+    return diagnosticError('response', null, 'Unexpected error', origin, 500);
   }
 });
