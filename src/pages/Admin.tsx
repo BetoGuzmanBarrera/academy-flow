@@ -44,6 +44,17 @@ type RevealedCredential = {
   };
 };
 
+type CredentialMetadata = {
+  credentialId: string;
+  orderId: string;
+  serviceId: string;
+  serviceName: string;
+  createdAt: string;
+  expiresAt: string | null;
+  deletedAt: string | null;
+  hasEncryptedPayload: boolean;
+};
+
 // Los mensajes del motor de base de datos exponen nombres de tablas, restricciones
 // y políticas, así que se registran en la consola y en pantalla se muestra un texto fijo.
 function reportError(context: string, detail: unknown): string {
@@ -75,9 +86,8 @@ export function Admin() {
   const [revealedCredential, setRevealedCredential] = useState<RevealedCredential | null>(null);
   const [revealLoadingId, setRevealLoadingId] = useState<string | null>(null);
   const [revealError, setRevealError] = useState('');
-  const [credentialRows, setCredentialRows] = useState<{ id: string; order_id: string; service_id: string; deleted_at: string | null; expires_at: string | null }[]>([]);
+  const [credentialRows, setCredentialRows] = useState<CredentialMetadata[]>([]);
   const [credentialsLoading, setCredentialsLoading] = useState(false);
-  const [serviceMap, setServiceMap] = useState<Record<string, string>>({});
 
   const loadData = async () => {
     if (!isAdmin) return;
@@ -85,44 +95,51 @@ export function Admin() {
     setLoading(true);
     setError('');
 
-    const [categoriesResult, servicesResult, ordersResult, messagesResult] = await Promise.all([
-      supabase.from('categories').select('*').order('name'),
-      supabase.from('services').select('*').order('created_at', { ascending: false }),
-      supabase.from('orders').select(`
-        *,
-        items:order_items(
+    const [categoriesSettled, servicesSettled, ordersSettled, messagesSettled] =
+      await Promise.allSettled([
+        supabase.from('categories').select('*').order('name'),
+        supabase.from('services').select('*').order('created_at', { ascending: false }),
+        supabase.from('orders').select(`
           *,
-          service:services(*, category:categories(*))
-        )
-      `).order('created_at', { ascending: false }),
-      supabase.from('support_messages').select('*').order('created_at', { ascending: false }),
-    ]);
+          items:order_items(
+            *,
+            service:services(*, category:categories(*))
+          )
+        `).order('created_at', { ascending: false }),
+        supabase.from('support_messages').select('*').order('created_at', { ascending: false }),
+      ]);
 
-    const firstError =
-      categoriesResult.error || servicesResult.error || ordersResult.error || messagesResult.error;
+    const categoriesResult = categoriesSettled.status === 'fulfilled' ? categoriesSettled.value : null;
+    const servicesResult = servicesSettled.status === 'fulfilled' ? servicesSettled.value : null;
+    const ordersResult = ordersSettled.status === 'fulfilled' ? ordersSettled.value : null;
+    const messagesResult = messagesSettled.status === 'fulfilled' ? messagesSettled.value : null;
 
-    if (firstError) {
-      setError(reportError('No se pudieron cargar los datos del panel', firstError));
-      setLoading(false);
-      return;
+    const errors: string[] = [];
+    if (!categoriesResult || categoriesResult.error) errors.push('categorías');
+    if (!servicesResult || servicesResult.error) errors.push('servicios');
+    if (!ordersResult || ordersResult.error) errors.push('órdenes');
+    if (!messagesResult || messagesResult.error) errors.push('mensajes');
+
+    if (errors.length > 0) {
+      setError(`No se pudieron cargar: ${errors.join(', ')}. Recarga el panel.`);
     }
 
-    setCategories(categoriesResult.data ?? []);
+    setCategories(categoriesResult?.data ?? []);
     setServices(
-      (servicesResult.data ?? []).map((service) => ({
+      (servicesResult?.data ?? []).map((service) => ({
         ...service,
         draftPrice: String(service.price),
       })),
     );
-    setOrders(ordersResult.data ?? []);
-    setMessages(messagesResult.data ?? []);
+    setOrders(ordersResult?.data ?? []);
+    setMessages(messagesResult?.data ?? []);
     setNewService((current) => ({
       ...current,
-      categoryId: current.categoryId || categoriesResult.data?.[0]?.id || '',
+      categoryId: current.categoryId || categoriesResult?.data?.[0]?.id || '',
     }));
     setResponseDrafts(
       Object.fromEntries(
-        (messagesResult.data ?? []).map((message) => [message.id, message.admin_response ?? '']),
+        (messagesResult?.data ?? []).map((message) => [message.id, message.admin_response ?? '']),
       ),
     );
     setLoading(false);
@@ -337,23 +354,36 @@ export function Admin() {
     setCredentialsLoading(true);
     setRevealError('');
 
-    const [credsResult, servicesResult] = await Promise.all([
-      supabase.from('order_credentials').select('id, order_id, service_id, deleted_at, expires_at').order('created_at', { ascending: false }),
-      supabase.from('services').select('id, name'),
-    ]);
+    try {
+      const session = await supabase.auth.getSession();
+      const accessToken = session.data.session?.access_token;
+      if (!accessToken) {
+        setRevealError('Debes iniciar sesión.');
+        setCredentialsLoading(false);
+        return;
+      }
 
-    if (credsResult.error) {
-      setRevealError('No se pudieron cargar las credenciales.');
-      setCredentialsLoading(false);
-      return;
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-order-credentials`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setRevealError(result?.error || 'No se pudieron cargar las credenciales.');
+        setCredentialsLoading(false);
+        return;
+      }
+
+      setCredentialRows(result.credentials ?? []);
+    } catch {
+      setRevealError('No se pudieron cargar las credenciales. Inténtalo de nuevo.');
     }
 
-    setCredentialRows(credsResult.data ?? []);
-    const map: Record<string, string> = {};
-    for (const s of servicesResult.data ?? []) {
-      map[s.id] = s.name;
-    }
-    setServiceMap(map);
     setCredentialsLoading(false);
   };
 
@@ -825,13 +855,13 @@ export function Admin() {
                     </thead>
                     <tbody>
                       {credentialRows.map((cred) => {
-                        const isDeleted = cred.deleted_at !== null;
-                        const isExpired = cred.expires_at !== null && new Date(cred.expires_at) < new Date();
+                        const isDeleted = cred.deletedAt !== null;
+                        const isExpired = cred.expiresAt !== null && new Date(cred.expiresAt) < new Date();
                         return (
-                          <tr key={cred.id} className="border-t align-top">
-                            <td className="p-4 font-mono text-xs">{cred.id.slice(0, 8)}…</td>
-                            <td className="p-4 font-mono text-xs">{cred.order_id.slice(0, 8)}…</td>
-                            <td className="p-4">{serviceMap[cred.service_id] ?? cred.service_id.slice(0, 8)}</td>
+                          <tr key={cred.credentialId} className="border-t align-top">
+                            <td className="p-4 font-mono text-xs">{cred.credentialId.slice(0, 8)}…</td>
+                            <td className="p-4 font-mono text-xs">{cred.orderId.slice(0, 8)}…</td>
+                            <td className="p-4">{cred.serviceName}</td>
                             <td className="p-4">
                               {isDeleted ? (
                                 <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800">Eliminada</span>
@@ -844,11 +874,11 @@ export function Admin() {
                             <td className="p-4">
                               <button
                                 type="button"
-                                onClick={() => void handleRevealCredential(cred.id)}
-                                disabled={isDeleted || isExpired || revealLoadingId === cred.id}
+                                onClick={() => void handleRevealCredential(cred.credentialId)}
+                                disabled={isDeleted || isExpired || revealLoadingId === cred.credentialId}
                                 className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg disabled:opacity-50"
                               >
-                                {revealLoadingId === cred.id ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
+                                {revealLoadingId === cred.credentialId ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
                                 Revelar
                               </button>
                             </td>
