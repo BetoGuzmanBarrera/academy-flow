@@ -180,8 +180,9 @@ Deno.serve(async (req: Request) => {
 
     if (rpcError) {
       console.error('RPC error:', rpcError.code, rpcError.message);
-      const message = rpcError.code === 'P0001' ? rpcError.message : 'Order could not be created';
-      return new Response(JSON.stringify({ error: message }), {
+      return new Response(JSON.stringify({
+        error: `DIAGNOSTIC RPC: code=${rpcError.code} msg=${rpcError.message}`,
+      }), {
         status: 400,
         headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) },
       });
@@ -196,7 +197,9 @@ Deno.serve(async (req: Request) => {
       headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) },
     });
   } catch (err) {
-    console.error('create-secure-order error:', (err as Error).message);
-    return jsonError('An error occurred while creating the order', 500, origin);
+    const errMsg = (err as Error).message;
+    const errStack = (err as Error).stack?.split('\n')[1]?.trim() ?? '';
+    console.error('create-secure-order error:', errMsg, errStack);
+    return jsonError(`DIAGNOSTIC: ${errMsg} | ${errStack}`, 500, origin);
   }
 });
