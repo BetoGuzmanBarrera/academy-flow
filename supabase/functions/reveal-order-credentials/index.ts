@@ -21,8 +21,8 @@ function base64ToBytes(b64: string): Uint8Array {
 }
 
 async function getEncryptionKey(): Promise<CryptoKey> {
-  const keyHex = Deno.env.get('CREDENTIALS_ENCRYPTION_KEY_V1');
-  if (!keyHex || keyHex.length !== 64) {
+  const keyHex = Deno.env.get('CREDENTIALS_ENCRYPTION_KEY_V1')?.trim();
+  if (!keyHex || keyHex.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(keyHex)) {
     throw new Error('Encryption key not configured');
   }
   const keyBytes = new Uint8Array(32);
