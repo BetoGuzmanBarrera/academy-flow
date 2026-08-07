@@ -228,6 +228,12 @@ export interface Database {
           platform_password: string | null;
           aleks_account: string | null;
           additional_info: string | null;
+          encrypted_payload: string | null;
+          encryption_iv: string | null;
+          key_version: number;
+          expires_at: string | null;
+          updated_at: string;
+          deleted_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -238,6 +244,12 @@ export interface Database {
           platform_password?: string | null;
           aleks_account?: string | null;
           additional_info?: string | null;
+          encrypted_payload?: string | null;
+          encryption_iv?: string | null;
+          key_version?: number;
+          expires_at?: string | null;
+          updated_at?: string;
+          deleted_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -248,6 +260,51 @@ export interface Database {
           platform_password?: string | null;
           aleks_account?: string | null;
           additional_info?: string | null;
+          encrypted_payload?: string | null;
+          encryption_iv?: string | null;
+          key_version?: number;
+          expires_at?: string | null;
+          updated_at?: string;
+          deleted_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      credential_access_log: {
+        Row: {
+          id: string;
+          credential_id: string | null;
+          order_id: string | null;
+          accessed_by: string | null;
+          requested_credential_id: string | null;
+          action: string;
+          success: boolean;
+          reason_code: string | null;
+          request_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          credential_id?: string | null;
+          order_id?: string | null;
+          accessed_by?: string | null;
+          requested_credential_id?: string | null;
+          action: string;
+          success?: boolean;
+          reason_code?: string | null;
+          request_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          credential_id?: string | null;
+          order_id?: string | null;
+          accessed_by?: string | null;
+          requested_credential_id?: string | null;
+          action?: string;
+          success?: boolean;
+          reason_code?: string | null;
+          request_id?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -381,6 +438,50 @@ export interface Database {
           total_amount: number;
           discount_amount: number;
         }[];
+      };
+      create_secure_order: {
+        Args: {
+          p_order_id: string;
+          p_user_id: string;
+          p_payment_method: string;
+          p_referral_code?: string | null;
+          p_encrypted_credentials?: Json;
+          p_billing?: Json | null;
+        };
+        Returns: {
+          order_id: string;
+          total_amount: number;
+          discount_amount: number;
+        }[];
+      };
+      check_reveal_rate_limit: {
+        Args: {
+          p_admin_id: string;
+          p_request_id: string;
+        };
+        Returns: boolean;
+      };
+      complete_order_secure: {
+        Args: {
+          p_order_id: string;
+          p_admin_id: string;
+        };
+        Returns: undefined;
+      };
+      reopen_order_secure: {
+        Args: {
+          p_order_id: string;
+          p_admin_id: string;
+        };
+        Returns: undefined;
+      };
+      cleanup_expired_credentials: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
+      };
+      get_encryption_key: {
+        Args: Record<PropertyKey, never>;
+        Returns: string;
       };
       generate_referral_code: {
         Args: { user_id_param: string };

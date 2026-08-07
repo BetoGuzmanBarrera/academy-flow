@@ -4,6 +4,9 @@ import {
   Boxes,
   CheckCircle2,
   CircleDollarSign,
+  Eye,
+  EyeOff,
+  KeyRound,
   Loader2,
   MessageSquare,
   PackageCheck,
@@ -18,7 +21,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { ServiceDetails } from '../components/ServiceDetails';
 import type { Category, Json, Order, Service, SupportMessage } from '../lib/database.types';
 
-type AdminTab = 'dashboard' | 'services' | 'orders' | 'support';
+type AdminTab = 'dashboard' | 'services' | 'orders' | 'support' | 'credentials';
 
 type EditableService = Service & { draftPrice: string };
 
@@ -27,6 +30,18 @@ type NewService = {
   description: string;
   price: string;
   categoryId: string;
+};
+
+type RevealedCredential = {
+  credentialId: string;
+  orderId: string;
+  serviceId: string;
+  decrypted: {
+    platformEmail?: string;
+    platformPassword?: string;
+    aleksAccount?: string;
+    additionalInfo?: string;
+  };
 };
 
 // Los mensajes del motor de base de datos exponen nombres de tablas, restricciones
@@ -57,6 +72,12 @@ export function Admin() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [revealedCredential, setRevealedCredential] = useState<RevealedCredential | null>(null);
+  const [revealLoadingId, setRevealLoadingId] = useState<string | null>(null);
+  const [revealError, setRevealError] = useState('');
+  const [credentialRows, setCredentialRows] = useState<{ id: string; order_id: string; service_id: string; deleted_at: string | null; expires_at: string | null }[]>([]);
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [serviceMap, setServiceMap] = useState<Record<string, string>>({});
 
   const loadData = async () => {
     if (!isAdmin) return;
@@ -271,25 +292,111 @@ export function Admin() {
 
   const handleOrderStatus = async (order: Order, status: Order['status']) => {
     setSavingId(order.id);
-    const { data, error: updateError } = await supabase
-      .from('orders')
-      .update({ status })
-      .eq('id', order.id)
-      .select()
-      .single();
 
-    if (updateError) {
-      setError(reportError('No se pudo actualizar el estado de la orden', updateError));
-    } else if (data) {
-      setOrders((current) => current.map((item) => (item.id === data.id ? data : item)));
-      await logAction('status_change', 'orders', data.id, {
+    try {
+      const session = await supabase.auth.getSession();
+      const accessToken = session.data.session?.access_token;
+      if (!accessToken) {
+        setError('Debes iniciar sesión para cambiar el estado de una orden.');
+        setSavingId(null);
+        return;
+      }
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/complete-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ orderId: order.id, status }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setError(result?.error || 'No se pudo actualizar el estado de la orden.');
+        setSavingId(null);
+        return;
+      }
+
+      const updatedOrder = { ...order, status };
+      setOrders((current) => current.map((item) => (item.id === order.id ? updatedOrder : item)));
+      await logAction('status_change', 'orders', order.id, {
         previous_status: order.status,
         status,
       });
       showNotice('Estado de la orden actualizado');
+    } catch (err) {
+      setError('No se pudo actualizar el estado de la orden. Inténtalo de nuevo.');
     }
 
     setSavingId(null);
+  };
+
+  const loadCredentials = async () => {
+    setCredentialsLoading(true);
+    setRevealError('');
+
+    const [credsResult, servicesResult] = await Promise.all([
+      supabase.from('order_credentials').select('id, order_id, service_id, deleted_at, expires_at').order('created_at', { ascending: false }),
+      supabase.from('services').select('id, name'),
+    ]);
+
+    if (credsResult.error) {
+      setRevealError('No se pudieron cargar las credenciales.');
+      setCredentialsLoading(false);
+      return;
+    }
+
+    setCredentialRows(credsResult.data ?? []);
+    const map: Record<string, string> = {};
+    for (const s of servicesResult.data ?? []) {
+      map[s.id] = s.name;
+    }
+    setServiceMap(map);
+    setCredentialsLoading(false);
+  };
+
+  const handleRevealCredential = async (credentialId: string) => {
+    const confirmed = window.confirm('¿Estás seguro de revelar las credenciales? Esta acción se registrará en el historial de auditoría.');
+    if (!confirmed) return;
+
+    setRevealLoadingId(credentialId);
+    setRevealError('');
+
+    try {
+      const session = await supabase.auth.getSession();
+      const accessToken = session.data.session?.access_token;
+      if (!accessToken) {
+        setRevealError('Debes iniciar sesión.');
+        setRevealLoadingId(null);
+        return;
+      }
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reveal-order-credentials`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ credentialId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setRevealError(result?.error || 'No se pudieron revelar las credenciales.');
+        setRevealLoadingId(null);
+        return;
+      }
+
+      setRevealedCredential(result);
+      window.setTimeout(() => setRevealedCredential(null), 30000);
+    } catch (err) {
+      setRevealError('No se pudieron revelar las credenciales. Inténtalo de nuevo.');
+    }
+
+    setRevealLoadingId(null);
   };
 
   const handleSupportResponse = async (message: SupportMessage) => {
@@ -341,6 +448,7 @@ export function Admin() {
     { id: 'services', label: 'Servicios', icon: Boxes },
     { id: 'orders', label: 'Órdenes', icon: PackageCheck },
     { id: 'support', label: 'Soporte', icon: MessageSquare },
+    { id: 'credentials', label: 'Credenciales', icon: KeyRound },
   ];
 
   return (
@@ -431,8 +539,8 @@ export function Admin() {
                     <SystemLine ok label="RLS y roles administrativos configurados" />
                     <SystemLine ok label="Precios calculados dentro de PostgreSQL" />
                     <SystemLine ok label="Órdenes creadas como pendientes" />
+                    <SystemLine ok label="Credenciales cifradas con AES-256-GCM" />
                     <SystemLine label="Stripe todavía no está conectado" />
-                    <SystemLine label="Credenciales todavía requieren cifrado" />
                   </div>
                 </section>
               </div>
@@ -638,6 +746,119 @@ export function Admin() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {tab === 'credentials' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-600">
+                  Las credenciales están cifradas. Revelarlas genera un registro de auditoría.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void loadCredentials()}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  <RefreshCw size={18} />
+                  Cargar
+                </button>
+              </div>
+
+              {revealError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                  {revealError}
+                </div>
+              )}
+
+              {revealedCredential && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-bold flex items-center gap-2">
+                      <Eye size={18} className="text-blue-600" />
+                      Credenciales reveladas
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setRevealedCredential(null)}
+                      className="p-1 hover:bg-blue-100 rounded"
+                      title="Ocultar"
+                    >
+                      <EyeOff size={18} />
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-3">Se ocultarán automáticamente en 30 segundos.</p>
+                  <dl className="space-y-2 text-sm">
+                    {revealedCredential.decrypted.platformEmail && (
+                      <div><dt className="font-semibold inline">Correo: </dt><dd className="inline font-mono">{revealedCredential.decrypted.platformEmail}</dd></div>
+                    )}
+                    {revealedCredential.decrypted.platformPassword && (
+                      <div><dt className="font-semibold inline">Contraseña: </dt><dd className="inline font-mono">{revealedCredential.decrypted.platformPassword}</dd></div>
+                    )}
+                    {revealedCredential.decrypted.aleksAccount && (
+                      <div><dt className="font-semibold inline">Cuenta ALEKS: </dt><dd className="inline font-mono">{revealedCredential.decrypted.aleksAccount}</dd></div>
+                    )}
+                    {revealedCredential.decrypted.additionalInfo && (
+                      <div><dt className="font-semibold inline">Info adicional: </dt><dd className="inline">{revealedCredential.decrypted.additionalInfo}</dd></div>
+                    )}
+                  </dl>
+                </div>
+              )}
+
+              {credentialsLoading ? (
+                <CenteredLoader />
+              ) : credentialRows.length === 0 ? (
+                <div className="bg-white border rounded-xl p-10 text-center text-gray-500">
+                  No hay credenciales. Haz clic en "Cargar" para ver las credenciales existentes.
+                </div>
+              ) : (
+                <div className="bg-white border rounded-xl overflow-x-auto">
+                  <table className="w-full min-w-[700px] text-sm">
+                    <thead className="bg-gray-50 text-left">
+                      <tr>
+                        <th className="p-4">Credencial</th>
+                        <th className="p-4">Orden</th>
+                        <th className="p-4">Servicio</th>
+                        <th className="p-4">Estado</th>
+                        <th className="p-4">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {credentialRows.map((cred) => {
+                        const isDeleted = cred.deleted_at !== null;
+                        const isExpired = cred.expires_at !== null && new Date(cred.expires_at) < new Date();
+                        return (
+                          <tr key={cred.id} className="border-t align-top">
+                            <td className="p-4 font-mono text-xs">{cred.id.slice(0, 8)}…</td>
+                            <td className="p-4 font-mono text-xs">{cred.order_id.slice(0, 8)}…</td>
+                            <td className="p-4">{serviceMap[cred.service_id] ?? cred.service_id.slice(0, 8)}</td>
+                            <td className="p-4">
+                              {isDeleted ? (
+                                <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800">Eliminada</span>
+                              ) : isExpired ? (
+                                <span className="text-xs px-2 py-1 rounded-full bg-orange-100 text-orange-800">Vencida</span>
+                              ) : (
+                                <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">Cifrada</span>
+                              )}
+                            </td>
+                            <td className="p-4">
+                              <button
+                                type="button"
+                                onClick={() => void handleRevealCredential(cred.id)}
+                                disabled={isDeleted || isExpired || revealLoadingId === cred.id}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg disabled:opacity-50"
+                              >
+                                {revealLoadingId === cred.id ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
+                                Revelar
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

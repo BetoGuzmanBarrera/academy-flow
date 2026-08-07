@@ -182,19 +182,35 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
           }
         : null;
 
-      const { data, error: orderError } = await supabase
-        .rpc('create_pending_order', {
-          payment_method_param: paymentMethod,
-          referral_code_param: referralSuccess ? referralCode.toUpperCase() : null,
-          credentials_param: credentialsPayload,
-          billing_param: billingPayload,
-        })
-        .single();
+      const session = await supabase.auth.getSession();
+      const accessToken = session.data.session?.access_token;
+      if (!accessToken) {
+        setError('Debes iniciar sesión para completar la compra');
+        return;
+      }
 
-      if (orderError) throw orderError;
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-secure-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          paymentMethod,
+          referralCode: referralSuccess ? referralCode.toUpperCase() : null,
+          credentials: credentialsPayload,
+          billing: billingPayload,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result?.error || GENERIC_ORDER_ERROR);
+      }
 
       await clearCart();
-      setSuccessOrderId(data?.order_id ?? null);
+      setSuccessOrderId(result?.orderId ?? null);
       setSuccess(true);
 
       window.setTimeout(() => {
