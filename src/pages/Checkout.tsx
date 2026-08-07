@@ -20,6 +20,10 @@ const GENERIC_ORDER_ERROR =
 // genera (SQLSTATE P0001). Cualquier otro error interno se registra en la
 // consola y el cliente ve un mensaje genérico.
 function friendlyOrderError(err: unknown): string {
+  if (err instanceof Error && err.message.startsWith('[')) {
+    return err.message;
+  }
+
   if (err && typeof err === 'object' && 'code' in err) {
     const { code, message } = err as { code?: string; message?: string };
     if (code === 'P0001' && message) return message;
