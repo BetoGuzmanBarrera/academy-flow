@@ -104,6 +104,7 @@ export interface Database {
           paid_at: string | null;
           refunded_at: string | null;
           payment_status: 'pending' | 'paid' | 'failed' | 'refunded';
+          stripe_checkout_session_id: string | null;
         };
         Insert: {
           id?: string;
@@ -121,6 +122,7 @@ export interface Database {
           paid_at?: string | null;
           refunded_at?: string | null;
           payment_status?: 'pending' | 'paid' | 'failed' | 'refunded';
+          stripe_checkout_session_id?: string | null;
         };
         Update: {
           id?: string;
@@ -138,6 +140,7 @@ export interface Database {
           paid_at?: string | null;
           refunded_at?: string | null;
           payment_status?: 'pending' | 'paid' | 'failed' | 'refunded';
+          stripe_checkout_session_id?: string | null;
         };
         Relationships: [];
       };
@@ -426,6 +429,24 @@ export interface Database {
         };
         Relationships: [];
       };
+      stripe_webhook_events: {
+        Row: {
+          event_id: string;
+          event_type: string;
+          processed_at: string;
+        };
+        Insert: {
+          event_id: string;
+          event_type: string;
+          processed_at?: string;
+        };
+        Update: {
+          event_id?: string;
+          event_type?: string;
+          processed_at?: string;
+        };
+        Relationships: [];
+      };
       admin_activity_log: {
         Row: {
           id: string;
@@ -473,6 +494,14 @@ export interface Database {
           total_amount: number;
           discount_amount: number;
         }[];
+      };
+      mark_order_paid_secure: {
+        Args: {
+          p_order_id: string;
+          p_payment_id: string;
+          p_checkout_session_id: string;
+        };
+        Returns: undefined;
       };
       check_reveal_rate_limit: {
         Args: {

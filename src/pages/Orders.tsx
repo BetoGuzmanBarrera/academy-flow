@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Package, Calendar, DollarSign, CreditCard } from 'lucide-react';
+import { Package, Calendar, DollarSign, CreditCard, Loader2, AlertCircle, CheckCircle2, Clock, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { ServiceDetails } from '../components/ServiceDetails';
@@ -85,6 +85,60 @@ export function Orders() {
     }
   };
 
+  const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState('');
+
+  const handleRetryPayment = async (orderId: string) => {
+    setPaymentError('');
+    setPayingOrderId(orderId);
+
+    try {
+      const session = await supabase.auth.getSession();
+      const accessToken = session.data.session?.access_token;
+      if (!accessToken) {
+        setPaymentError('Debes iniciar sesión para pagar.');
+        return;
+      }
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ orderId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result?.sessionUrl) {
+        setPaymentError(result?.error || 'No se pudo iniciar el pago. Inténtalo de nuevo.');
+        return;
+      }
+
+      window.location.href = result.sessionUrl;
+    } catch {
+      setPaymentError('No se pudo iniciar el pago. Inténtalo de nuevo.');
+    } finally {
+      setPayingOrderId(null);
+    }
+  };
+
+  const getPaymentStatusBadge = (paymentStatus: string) => {
+    switch (paymentStatus) {
+      case 'paid':
+        return { icon: CheckCircle2, color: 'bg-green-100 text-green-800', label: 'Pagado' };
+      case 'pending':
+        return { icon: Clock, color: 'bg-yellow-100 text-yellow-800', label: 'Pendiente' };
+      case 'failed':
+        return { icon: AlertCircle, color: 'bg-red-100 text-red-800', label: 'Fallido' };
+      case 'refunded':
+        return { icon: RefreshCw, color: 'bg-purple-100 text-purple-800', label: 'Reembolsado' };
+      default:
+        return { icon: Clock, color: 'bg-gray-100 text-gray-800', label: paymentStatus };
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -144,6 +198,17 @@ export function Orders() {
                     {getStatusText(order.status)}
                   </span>
 
+                  {(() => {
+                    const ps = getPaymentStatusBadge(order.payment_status);
+                    const PSIcon = ps.icon;
+                    return (
+                      <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${ps.color}`}>
+                        <PSIcon size={12} />
+                        {ps.label}
+                      </span>
+                    );
+                  })()}
+
                   <div className="flex items-center space-x-2 text-gray-600">
                     <CreditCard size={16} />
                     <span className="text-sm capitalize">{order.payment_method}</span>
@@ -185,10 +250,33 @@ export function Orders() {
                     <DollarSign size={20} />
                     <span className="font-semibold">Total:</span>
                   </div>
-                  <span className="text-2xl font-bold text-blue-600">
-                    ${order.total_amount.toFixed(2)}
-                  </span>
+                  <div className="flex items-center gap-4">
+                    {['pending', 'failed'].includes(order.payment_status) &&
+                      order.status !== 'cancelled' && (
+                      <button
+                        onClick={() => handleRetryPayment(order.id)}
+                        disabled={payingOrderId === order.id}
+                        className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50"
+                      >
+                        {payingOrderId === order.id ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <CreditCard size={16} />
+                        )}
+                        {order.payment_status === 'failed' ? 'Reintentar pago' : 'Pagar'}
+                      </button>
+                    )}
+                    <span className="text-2xl font-bold text-blue-600">
+                      ${order.total_amount.toFixed(2)}
+                    </span>
+                  </div>
                 </div>
+
+                {paymentError && payingOrderId === null && (
+                  <div className="mt-3 bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-sm">
+                    {paymentError}
+                  </div>
+                )}
               </div>
             </div>
           ))}

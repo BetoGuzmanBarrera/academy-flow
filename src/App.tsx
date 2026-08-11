@@ -33,6 +33,14 @@ function App() {
       setIsResetPassword(true);
       window.history.replaceState({}, '', window.location.pathname);
     }
+    if (params.get('payment') === 'success') {
+      setCurrentPage('orders');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    if (params.get('payment') === 'cancelled') {
+      setCurrentPage('orders');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, []);
 
   const handleCheckout = () => {

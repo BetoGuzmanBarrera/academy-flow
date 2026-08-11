@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { CreditCard, ArrowLeft, CheckCircle, Tag, X, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { CreditCard, ArrowLeft, CheckCircle, Tag, X, AlertCircle, Loader2 } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -38,7 +38,7 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
   const [step, setStep] = useState<'credentials' | 'payment'>('credentials');
   const [categories, setCategories] = useState<Record<string, Category>>({});
   const [credentials, setCredentials] = useState<Record<string, CredentialData>>({});
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'paypal'>('card');
+  const [paymentMethod] = useState<'card' | 'paypal'>('card');
   const [referralCode, setReferralCode] = useState('');
   const [discountAmount, setDiscountAmount] = useState(0);
   const [referralError, setReferralError] = useState('');
@@ -47,6 +47,9 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
+  const [paymentRedirectError, setPaymentRedirectError] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+  const submitLockRef = useRef(false);
   const [wantsBilling, setWantsBilling] = useState(false);
   const [billingRfc, setBillingRfc] = useState('');
   const [billingLegalName, setBillingLegalName] = useState('');
@@ -149,8 +152,43 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
     return true;
   };
 
+  const startStripeCheckout = async (orderId: string, accessToken: string): Promise<void> => {
+    setRedirecting(true);
+    try {
+      const checkoutResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ orderId }),
+      });
+
+      const checkoutResult = await checkoutResponse.json();
+
+      if (!checkoutResponse.ok || !checkoutResult?.sessionUrl) {
+        setPaymentRedirectError(true);
+        setSuccessOrderId(orderId);
+        setSuccess(true);
+        return;
+      }
+
+      window.location.href = checkoutResult.sessionUrl;
+    } catch {
+      setPaymentRedirectError(true);
+      setSuccessOrderId(orderId);
+      setSuccess(true);
+    } finally {
+      setRedirecting(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
+
     setError('');
     setLoading(true);
 
@@ -200,7 +238,7 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
           'Authorization': `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          paymentMethod,
+          paymentMethod: 'card',
           referralCode: referralSuccess ? referralCode.toUpperCase() : null,
           credentials: credentialsPayload,
           billing: billingPayload,
@@ -218,34 +256,74 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
         throw new Error(result?.error || GENERIC_ORDER_ERROR);
       }
 
+      const orderId = result?.orderId;
       await clearCart();
-      setSuccessOrderId(result?.orderId ?? null);
-      setSuccess(true);
+      setSuccessOrderId(orderId ?? null);
 
-      window.setTimeout(() => {
-        onComplete();
-      }, 2500);
+      if (orderId) {
+        await startStripeCheckout(orderId, accessToken);
+      } else {
+        setSuccess(true);
+      }
     } catch (err) {
       console.error('No se pudo crear la orden:', err);
       setError(friendlyOrderError(err));
     } finally {
       setLoading(false);
+      submitLockRef.current = false;
     }
   };
+
+  if (redirecting) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-12">
+        <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+          <Loader2 size={48} className="text-blue-600 mx-auto mb-4 animate-spin" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            Redirigiendo a Stripe...
+          </h2>
+          <p className="text-gray-600">
+            Serás llevado a la página segura de pago de Stripe.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (success) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12">
         <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-          <CheckCircle size={64} className="text-green-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            ¡Orden registrada!
-          </h2>
-          <p className="text-gray-600 mb-6">
-            La orden quedó pendiente de pago. No se realizó ningún cargo ni se almacenaron datos bancarios.
-          </p>
+          {paymentRedirectError ? (
+            <>
+              <AlertCircle size={64} className="text-amber-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                La orden fue creada, pero no pudimos iniciar el pago.
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Tu orden quedó registrada como pendiente. Puedes intentar el pago desde
+                la sección <strong>Mis Órdenes</strong>.
+              </p>
+              <button
+                onClick={onComplete}
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+              >
+                Ir a Mis Órdenes
+              </button>
+            </>
+          ) : (
+            <>
+              <CheckCircle size={64} className="text-green-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                ¡Orden registrada!
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Serás redirigido a Stripe para completar el pago de forma segura.
+              </p>
+            </>
+          )}
           {successOrderId && (
-            <p className="font-mono text-sm text-gray-500">
+            <p className="font-mono text-sm text-gray-500 mt-4">
               Orden #{successOrderId.slice(0, 8)}
             </p>
           )}
@@ -375,7 +453,7 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
           </div>
 
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Método de pago preferido</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Método de pago</h2>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
@@ -434,7 +512,7 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
                   name="payment"
                   value="card"
                   checked={paymentMethod === 'card'}
-                  onChange={(e) => setPaymentMethod(e.target.value as 'card')}
+                  onChange={() => {}}
                   className="mr-4"
                 />
                 <CreditCard className="text-blue-600 mr-3" size={24} />
@@ -444,28 +522,26 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
                 </div>
               </label>
 
-              <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer hover:border-blue-500 transition">
+              <label className="flex items-center p-4 border-2 rounded-lg cursor-not-allowed opacity-50 bg-gray-50">
                 <input
                   type="radio"
                   name="payment"
                   value="paypal"
-                  checked={paymentMethod === 'paypal'}
-                  onChange={(e) => setPaymentMethod(e.target.value as 'paypal')}
+                  disabled
                   className="mr-4"
                 />
                 <div className="w-6 h-6 bg-blue-600 rounded-full mr-3"></div>
                 <div>
                   <p className="font-semibold text-gray-900">PayPal</p>
-                  <p className="text-sm text-gray-600">Paga con tu cuenta PayPal</p>
+                  <p className="text-sm text-gray-600">Próximamente</p>
                 </div>
               </label>
             </div>
 
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-sm text-yellow-900">
-                <strong>Pago en preparación:</strong> Stripe y PayPal todavía no están conectados.
-                Por seguridad, esta versión no solicita números de tarjeta ni CVV. La orden se
-                registrará como pendiente hasta que el administrador confirme el pago.
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-900">
+                <strong>Pago seguro con Stripe:</strong> Serás redirigido a la página de pago de
+                Stripe para completar tu compra de forma segura. No almacenamos datos de tarjeta.
               </p>
             </div>
 
@@ -590,7 +666,7 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
               disabled={loading}
               className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-blue-400"
             >
-              {loading ? 'Registrando...' : `Crear orden por $${finalAmount.toFixed(2)}`}
+              {loading ? 'Procesando...' : `Pagar ${finalAmount.toFixed(2)}`}
             </button>
           </form>
           </div>
