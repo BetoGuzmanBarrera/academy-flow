@@ -118,7 +118,10 @@ export function Admin() {
     if (!categoriesResult || categoriesResult.error) errors.push('categorías');
     if (!servicesResult || servicesResult.error) errors.push('servicios');
     if (!ordersResult || ordersResult.error) errors.push('órdenes');
-    if (!messagesResult || messagesResult.error) errors.push('mensajes');
+    if (!messagesResult || messagesResult.error) {
+      errors.push('mensajes');
+      console.error('No se pudieron cargar los mensajes:', messagesResult?.error);
+    }
 
     if (errors.length > 0) {
       setError(`No se pudieron cargar: ${errors.join(', ')}. Recarga el panel.`);
