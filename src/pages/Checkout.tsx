@@ -207,9 +207,11 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
 
         return {
           service_id: item.service_id,
-          platformEmail: credential?.platformEmail || '',
-          platformPassword: credential?.platformPassword || '',
-          aleksAccount: credential?.aleksAccount || '',
+          platform: credential?.platform || '',
+          accessMethod: credential?.accessMethod || null,
+          username: credential?.username || '',
+          email: credential?.email || '',
+          password: credential?.password || '',
           additionalInfo: credential?.additionalInfo || '',
         };
       });

@@ -37,12 +37,73 @@ type RevealedCredential = {
   orderId: string;
   serviceId: string;
   decrypted: {
+    platform?: string;
+    accessMethod?: string;
+    username?: string;
+    email?: string;
+    password?: string;
+    additionalInfo?: string;
     platformEmail?: string;
     platformPassword?: string;
     aleksAccount?: string;
-    additionalInfo?: string;
   };
 };
+
+function getCredentialFields(decrypted: RevealedCredential['decrypted']): {
+  methodLabel?: string;
+  fields: { label: string; value: string }[];
+} {
+  const fields: { label: string; value: string }[] = [];
+  let methodLabel: string | undefined;
+
+  const platform = decrypted.platform?.toUpperCase().trim() ?? '';
+  const accessMethod = decrypted.accessMethod ?? '';
+
+  const isLegacy = !decrypted.platform && (decrypted.platformEmail || decrypted.aleksAccount);
+
+  if (isLegacy) {
+    if (decrypted.aleksAccount) {
+      fields.push({ label: 'Cuenta ALEKS', value: decrypted.aleksAccount });
+    }
+    if (decrypted.platformEmail) {
+      fields.push({ label: 'Correo', value: decrypted.platformEmail });
+    }
+    if (decrypted.platformPassword) {
+      fields.push({ label: 'Contraseña', value: decrypted.platformPassword });
+    }
+    if (decrypted.additionalInfo) {
+      fields.push({ label: 'Información adicional', value: decrypted.additionalInfo });
+    }
+    return { fields };
+  }
+
+  if (platform === 'ALEKS UNIVERSIDAD' || platform === 'ALEKS PREPARATORIA') {
+    if (accessMethod === 'aleks') {
+      methodLabel = 'Cuenta ALEKS';
+      if (decrypted.username) fields.push({ label: 'Usuario', value: decrypted.username });
+    } else if (accessMethod === 'uvm_safekey') {
+      methodLabel = 'UVM / SafeKey';
+      if (decrypted.email) fields.push({ label: 'Correo institucional', value: decrypted.email });
+    }
+  } else if (platform === 'COURSERA EXCEL') {
+    if (accessMethod === 'coursera') {
+      methodLabel = 'Cuenta Coursera';
+      if (decrypted.email) fields.push({ label: 'Correo', value: decrypted.email });
+    } else if (accessMethod === 'uvm_safekey') {
+      methodLabel = 'UVM / SafeKey';
+      if (decrypted.email) fields.push({ label: 'Correo institucional', value: decrypted.email });
+    }
+  } else if (platform === 'CAMBRIDGE ONE') {
+    if (decrypted.email) fields.push({ label: 'Correo electrónico', value: decrypted.email });
+  } else if (platform === 'FRANCÉS — BIBLIO EXOS') {
+    if (decrypted.username) fields.push({ label: 'Usuario', value: decrypted.username });
+  }
+
+  if (decrypted.password) fields.push({ label: 'Contraseña', value: decrypted.password });
+  if (decrypted.additionalInfo) fields.push({ label: 'Información adicional', value: decrypted.additionalInfo });
+
+  return { methodLabel, fields };
+}
 
 type CredentialMetadata = {
   credentialId: string;
@@ -833,7 +894,9 @@ export function Admin() {
                 </div>
               )}
 
-              {revealedCredential && (
+              {revealedCredential && (() => {
+                const { methodLabel, fields } = getCredentialFields(revealedCredential.decrypted);
+                return (
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-bold flex items-center gap-2">
@@ -851,21 +914,16 @@ export function Admin() {
                   </div>
                   <p className="text-xs text-gray-500 mb-3">Se ocultarán automáticamente en 30 segundos.</p>
                   <dl className="space-y-2 text-sm">
-                    {revealedCredential.decrypted.platformEmail && (
-                      <div><dt className="font-semibold inline">Correo: </dt><dd className="inline font-mono">{revealedCredential.decrypted.platformEmail}</dd></div>
+                    {methodLabel && (
+                      <div><dt className="font-semibold inline">Método: </dt><dd className="inline font-mono">{methodLabel}</dd></div>
                     )}
-                    {revealedCredential.decrypted.platformPassword && (
-                      <div><dt className="font-semibold inline">Contraseña: </dt><dd className="inline font-mono">{revealedCredential.decrypted.platformPassword}</dd></div>
-                    )}
-                    {revealedCredential.decrypted.aleksAccount && (
-                      <div><dt className="font-semibold inline">Cuenta ALEKS: </dt><dd className="inline font-mono">{revealedCredential.decrypted.aleksAccount}</dd></div>
-                    )}
-                    {revealedCredential.decrypted.additionalInfo && (
-                      <div><dt className="font-semibold inline">Info adicional: </dt><dd className="inline">{revealedCredential.decrypted.additionalInfo}</dd></div>
-                    )}
+                    {fields.map((f, i) => (
+                      <div key={i}><dt className="font-semibold inline">{f.label}: </dt><dd className="inline font-mono">{f.value}</dd></div>
+                    ))}
                   </dl>
                 </div>
-              )}
+                );
+              })()}
 
               {credentialsLoading ? (
                 <CenteredLoader />

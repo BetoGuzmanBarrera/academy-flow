@@ -2,11 +2,15 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { buildCredentialAAD } from '../_shared/aad.ts';
 import { getCorsHeaders, handleOptions } from '../_shared/cors.ts';
 
+type AccessMethod = 'aleks' | 'uvm_safekey' | 'coursera';
+
 interface RawCredential {
   service_id: string;
-  platformEmail?: string;
-  platformPassword?: string;
-  aleksAccount?: string;
+  platform?: string;
+  accessMethod?: AccessMethod | null;
+  username?: string;
+  email?: string;
+  password?: string;
   additionalInfo?: string;
 }
 
@@ -21,6 +25,15 @@ interface EncryptedCredential {
 const KEY_VERSION = 1;
 const MAX_CIPHERTEXT_BASE64 = 8192;
 
+const FORBIDDEN_KEYS = [
+  'otp', 'mfaCode', 'safeKeyCode', 'authenticatorCode',
+  'totp', 'backupCode', 'recoveryCode',
+];
+
+const ALLOWED_PAYLOAD_KEYS = new Set([
+  'platform', 'accessMethod', 'username', 'email', 'password', 'additionalInfo',
+]);
+
 function jsonError(message: string, status = 400, origin: string | null = null): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,
@@ -31,15 +44,16 @@ function jsonError(message: string, status = 400, origin: string | null = null):
 function diagnosticError(
   stage: 'auth' | 'validation' | 'encryption' | 'rpc' | 'response',
   code: string | null,
-  message: string,
+  _message: string,
   origin: string | null,
   status = 400,
 ): Response {
+  const safeMessage = code === 'P0001' ? _message : 'Order could not be created';
   return new Response(JSON.stringify({
     diagnostic: true,
     stage,
     code,
-    message,
+    message: safeMessage,
     requestId: null,
   }), {
     status,
@@ -59,23 +73,100 @@ async function getEncryptionKey(): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['encrypt']);
 }
 
-function validatePlaintext(cred: RawCredential): {
-  platformEmail: string;
-  platformPassword: string;
-  aleksAccount: string;
+function normalizePlatform(name: string): string {
+  return name.trim().toUpperCase();
+}
+
+function isAleksPlatform(normalized: string): boolean {
+  return normalized === 'ALEKS UNIVERSIDAD' || normalized === 'ALEKS PREPARATORIA';
+}
+
+function isCourseraPlatform(normalized: string): boolean {
+  return normalized === 'COURSERA EXCEL';
+}
+
+function isCambridgePlatform(normalized: string): boolean {
+  return normalized === 'CAMBRIDGE ONE';
+}
+
+function isFrenchPlatform(normalized: string): boolean {
+  return normalized === 'FRANCÉS — BIBLIO EXOS';
+}
+
+function validateCredential(
+  cred: RawCredential,
+  categoryName: string,
+): {
+  platform: string;
+  accessMethod: AccessMethod | null;
+  username: string;
+  email: string;
+  password: string;
   additionalInfo: string;
 } {
-  const platformEmail = (cred.platformEmail ?? '').trim();
-  const platformPassword = cred.platformPassword ?? '';
-  const aleksAccount = (cred.aleksAccount ?? '').trim();
+  const platform = normalizePlatform(categoryName);
+  const accessMethod = cred.accessMethod ?? null;
+  const username = (cred.username ?? '').trim();
+  const email = (cred.email ?? '').trim().toLowerCase();
+  const password = cred.password ?? '';
   const additionalInfo = (cred.additionalInfo ?? '').trim();
 
-  if (platformEmail.length > 254) throw new Error('platformEmail exceeds 254 characters');
-  if (platformPassword.length > 512) throw new Error('platformPassword exceeds 512 characters');
-  if (aleksAccount.length > 200) throw new Error('aleksAccount exceeds 200 characters');
+  if (username.length > 200) throw new Error('username exceeds 200 characters');
+  if (email.length > 254) throw new Error('email exceeds 254 characters');
+  if (password.length > 512) throw new Error('password exceeds 512 characters');
   if (additionalInfo.length > 2000) throw new Error('additionalInfo exceeds 2000 characters');
 
-  return { platformEmail, platformPassword, aleksAccount, additionalInfo };
+  for (const key of Object.keys(cred)) {
+    if (!ALLOWED_PAYLOAD_KEYS.has(key)) {
+      throw new Error('invalid credential field');
+    }
+  }
+
+  for (const forbidden of FORBIDDEN_KEYS) {
+    if (forbidden in cred) {
+      throw new Error('invalid credential field');
+    }
+  }
+
+  if (isAleksPlatform(platform)) {
+    if (accessMethod === 'aleks') {
+      if (!username) throw new Error('username is required');
+      if (!password) throw new Error('password is required');
+      if (email) throw new Error('invalid credential field');
+    } else if (accessMethod === 'uvm_safekey') {
+      if (!email) throw new Error('email is required');
+      if (!password) throw new Error('password is required');
+      if (username) throw new Error('invalid credential field');
+    } else {
+      throw new Error('invalid access method');
+    }
+  } else if (isCourseraPlatform(platform)) {
+    if (accessMethod === 'coursera') {
+      if (!email) throw new Error('email is required');
+      if (!password) throw new Error('password is required');
+      if (username) throw new Error('invalid credential field');
+    } else if (accessMethod === 'uvm_safekey') {
+      if (!email) throw new Error('email is required');
+      if (!password) throw new Error('password is required');
+      if (username) throw new Error('invalid credential field');
+    } else {
+      throw new Error('invalid access method');
+    }
+  } else if (isCambridgePlatform(platform)) {
+    if (accessMethod !== null) throw new Error('invalid credential field');
+    if (!email) throw new Error('email is required');
+    if (!password) throw new Error('password is required');
+    if (username) throw new Error('invalid credential field');
+  } else if (isFrenchPlatform(platform)) {
+    if (accessMethod !== null) throw new Error('invalid credential field');
+    if (!username) throw new Error('username is required');
+    if (!password) throw new Error('password is required');
+    if (email) throw new Error('invalid credential field');
+  } else {
+    throw new Error('unsupported platform');
+  }
+
+  return { platform, accessMethod, username, email, password, additionalInfo };
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -134,6 +225,35 @@ Deno.serve(async (req: Request) => {
       auth: { persistSession: false },
     });
 
+    const serviceIds = rawCredentials.map((c) => c.service_id).filter(Boolean);
+    if (serviceIds.length !== rawCredentials.length) {
+      return diagnosticError('validation', null, 'Invalid service_id in credentials', origin);
+    }
+
+    const { data: serviceRows } = await adminClient
+      .from('services')
+      .select('id, category_id, is_active')
+      .in('id', serviceIds.length > 0 ? serviceIds : ['00000000-0000-0000-0000-000000000000']);
+
+    const { data: categoryRows } = await adminClient
+      .from('categories')
+      .select('id, name')
+      .in(
+        'id',
+        [...new Set((serviceRows ?? []).map((s: any) => s.category_id))].length > 0
+          ? [...new Set((serviceRows ?? []).map((s: any) => s.category_id))]
+          : ['00000000-0000-0000-0000-000000000000'],
+      );
+
+    const categoryMap: Record<string, string> = {};
+    for (const c of categoryRows ?? []) {
+      categoryMap[c.id] = c.name;
+    }
+    const serviceCategoryMap: Record<string, string> = {};
+    for (const s of serviceRows ?? []) {
+      serviceCategoryMap[s.id] = categoryMap[s.category_id] ?? '';
+    }
+
     let key: CryptoKey;
     try {
       key = await getEncryptionKey();
@@ -155,19 +275,27 @@ Deno.serve(async (req: Request) => {
       }
       seenServiceIds.add(cred.service_id);
 
-      let validated: ReturnType<typeof validatePlaintext>;
+      const categoryName = serviceCategoryMap[cred.service_id];
+      if (!categoryName) {
+        return diagnosticError('validation', null, 'Service not found', origin);
+      }
+
+      let validated: ReturnType<typeof validateCredential>;
       try {
-        validated = validatePlaintext(cred);
+        validated = validateCredential(cred, categoryName);
       } catch (err) {
         return diagnosticError('validation', null, (err as Error).message, origin);
       }
+
       const credentialId = crypto.randomUUID();
 
       const plaintext = JSON.stringify({
-        platformEmail: validated.platformEmail,
-        platformPassword: validated.platformPassword,
-        aleksAccount: validated.aleksAccount,
-        additionalInfo: validated.additionalInfo,
+        platform: validated.platform,
+        accessMethod: validated.accessMethod,
+        username: validated.username || undefined,
+        email: validated.email || undefined,
+        password: validated.password || undefined,
+        additionalInfo: validated.additionalInfo || undefined,
       });
 
       const iv = crypto.getRandomValues(new Uint8Array(12));
