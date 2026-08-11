@@ -300,7 +300,28 @@ export function Admin() {
     const { error: deleteError } = await supabase.from('services').delete().eq('id', service.id);
 
     if (deleteError) {
-      setError(reportError('No se pudo eliminar el servicio', deleteError));
+      if (deleteError.code === '23503') {
+        const { error: deactivateError } = await supabase
+          .from('services')
+          .update({ is_active: false })
+          .eq('id', service.id);
+
+        if (deactivateError) {
+          console.error('No se pudo desactivar el servicio:', { code: deactivateError.code });
+          setError(reportError('No se pudo eliminar el servicio', deactivateError));
+        } else {
+          setServices((current) =>
+            current.map((item) => (item.id === service.id ? { ...item, is_active: false } : item)),
+          );
+          await logAction('deactivate', 'services', service.id, { name: service.name });
+          showNotice(
+            'Este servicio tiene historial de pedidos, por lo que no puede eliminarse. Se desactivó correctamente y ya no aparecerá para nuevos clientes.',
+          );
+        }
+      } else {
+        console.error('No se pudo eliminar el servicio:', { code: deleteError.code });
+        setError(reportError('No se pudo eliminar el servicio', deleteError));
+      }
     } else {
       setServices((current) => current.filter((item) => item.id !== service.id));
       await logAction('delete', 'services', service.id, { name: service.name });
