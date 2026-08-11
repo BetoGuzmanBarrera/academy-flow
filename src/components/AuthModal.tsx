@@ -89,6 +89,9 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   const handleCaptchaToken = useCallback((token: string) => {
     setCaptchaToken(token);
+    if (token) {
+      setCaptchaError(false);
+    }
   }, []);
 
   const handleCaptchaError = useCallback(() => {
