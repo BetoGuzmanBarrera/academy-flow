@@ -83,6 +83,11 @@ Deno.serve(async (req: Request) => {
 
     const amountInCents = Math.round(totalAmount * 100);
 
+    // Stripe minimum for MXN is MXN$10.00 (1000 cents)
+    if (amountInCents < 1000) {
+      return jsonError('El monto de la orden es menor al mínimo permitido por el sistema de pago (MXN$10.00).', 400, origin);
+    }
+
     // ── Duplicate session protection ─────────────────────────────────
     // If a session already exists for this order, retrieve it instead of
     // creating a new one. Stripe allows retrieving a session by ID.
