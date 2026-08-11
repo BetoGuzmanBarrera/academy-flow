@@ -8,6 +8,7 @@ import { PersonalizedHelp } from '../components/PersonalizedHelp';
 import { openSupportChat } from '../components/SupportChat';
 import { ServiceDetails } from '../components/ServiceDetails';
 import { hasValidDetails } from '../lib/serviceCustomization';
+import { STRIPE_MINIMUM_MXN } from '../lib/stripeConstants';
 import type { Category } from '../lib/database.types';
 
 interface CheckoutProps {
@@ -131,6 +132,7 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
   };
 
   const finalAmount = totalAmount - discountAmount;
+  const belowStripeMinimum = paymentMethod === 'card' && finalAmount < STRIPE_MINIMUM_MXN;
 
   const validateBillingFields = () => {
     if (wantsBilling) {
@@ -201,6 +203,11 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
       }
 
       if (!validateBillingFields()) {
+        return;
+      }
+
+      if (belowStripeMinimum) {
+        setError('El pago mínimo con tarjeta es de $10 MXN. Agrega otro servicio o aumenta la cantidad para continuar.');
         return;
       }
 
@@ -665,10 +672,17 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
               </div>
             )}
 
+            {belowStripeMinimum && (
+              <div className="bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 rounded-lg text-sm">
+                El pago mínimo con tarjeta es de $10 MXN.
+                Agrega otro servicio o aumenta la cantidad para continuar.
+              </div>
+            )}
+
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-blue-400"
+              disabled={loading || belowStripeMinimum}
+              className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {loading ? 'Procesando...' : `Pagar ${finalAmount.toFixed(2)}`}
             </button>

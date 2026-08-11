@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { ServiceDetails } from '../components/ServiceDetails';
 import { PersonalizedHelp } from '../components/PersonalizedHelp';
 import { openSupportChat } from '../components/SupportChat';
+import { STRIPE_MINIMUM_MXN } from '../lib/stripeConstants';
 import type { Order, OrderItem, Service } from '../lib/database.types';
 
 interface OrderWithItems extends Order {
@@ -255,7 +256,8 @@ export function Orders() {
                   </div>
                   <div className="flex items-center gap-4">
                     {['pending', 'failed'].includes(order.payment_status) &&
-                      order.status !== 'cancelled' && (
+                      order.status !== 'cancelled' &&
+                      Number(order.total_amount) >= STRIPE_MINIMUM_MXN && (
                       <button
                         onClick={() => handleRetryPayment(order.id)}
                         disabled={payingOrderId === order.id}
@@ -268,6 +270,18 @@ export function Orders() {
                         )}
                         {order.payment_status === 'failed' ? 'Reintentar pago' : 'Pagar'}
                       </button>
+                    )}
+                    {['pending', 'failed'].includes(order.payment_status) &&
+                      order.status !== 'cancelled' &&
+                      Number(order.total_amount) < STRIPE_MINIMUM_MXN && (
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-gray-700">
+                          Pago con tarjeta no disponible para este total
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          El pago mínimo con tarjeta es de $10 MXN.
+                        </p>
+                      </div>
                     )}
                     <span className="text-2xl font-bold text-blue-600">
                       ${order.total_amount.toFixed(2)}
