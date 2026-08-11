@@ -31,7 +31,7 @@ const FORBIDDEN_KEYS = [
 ];
 
 const ALLOWED_PAYLOAD_KEYS = new Set([
-  'platform', 'accessMethod', 'username', 'email', 'password', 'additionalInfo',
+  'service_id', 'platform', 'accessMethod', 'username', 'email', 'password', 'additionalInfo',
 ]);
 
 function jsonError(message: string, status = 400, origin: string | null = null): Response {
