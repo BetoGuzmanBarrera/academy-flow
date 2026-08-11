@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { X, Mail, Lock, User, Calendar } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { X, Mail, Lock, User, Calendar, Eye, EyeOff, Check, Circle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Turnstile } from './Turnstile';
@@ -20,14 +20,46 @@ const NEUTRAL_RESET_MESSAGE =
 const NEUTRAL_SIGN_UP_MESSAGE =
   'Revisa tu correo para continuar. Si ya tenías una cuenta con ese correo, inicia sesión.';
 
+interface PasswordChecks {
+  length: boolean;
+  uppercase: boolean;
+  lowercase: boolean;
+  number: boolean;
+  special: boolean;
+}
+
+function usePasswordChecks(password: string): PasswordChecks {
+  return useMemo(
+    () => ({
+      length: password.length >= 10,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      number: /[0-9]/.test(password),
+      special: /[^A-Za-z0-9]/.test(password),
+    }),
+    [password],
+  );
+}
+
+const REQUIREMENT_LABELS: { key: keyof PasswordChecks; label: string }[] = [
+  { key: 'length', label: 'Mínimo 10 caracteres' },
+  { key: 'uppercase', label: 'Una letra mayúscula' },
+  { key: 'lowercase', label: 'Una letra minúscula' },
+  { key: 'number', label: 'Un número' },
+  { key: 'special', label: 'Un carácter especial' },
+];
+
 export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [birthDate, setBirthDate] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -38,6 +70,16 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   const hasSiteKey = Boolean(import.meta.env.VITE_TURNSTILE_SITE_KEY);
   const captchaValid = hasSiteKey && captchaToken.length > 0 && !captchaError;
+
+  const passwordChecks = usePasswordChecks(password);
+  const allRequirementsMet =
+    passwordChecks.length &&
+    passwordChecks.uppercase &&
+    passwordChecks.lowercase &&
+    passwordChecks.number &&
+    passwordChecks.special;
+
+  const passwordsMatch = password.length > 0 && password === confirmPassword;
 
   const resetCaptcha = useCallback(() => {
     setCaptchaToken('');
@@ -65,6 +107,17 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     if (hasSiteKey && !captchaValid) {
       setError('Debes completar el CAPTCHA para continuar.');
       return;
+    }
+
+    if (!isLogin && !isForgotPassword) {
+      if (!allRequirementsMet) {
+        setError('Tu contraseña no cumple todos los requisitos.');
+        return;
+      }
+      if (!passwordsMatch) {
+        setError('Las contraseñas no coinciden.');
+        return;
+      }
     }
 
     setError('');
@@ -111,6 +164,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           if (alreadyRegistered) {
             setSuccessMessage(NEUTRAL_SIGN_UP_MESSAGE);
             setPassword('');
+            setConfirmPassword('');
           } else {
             setError(GENERIC_SIGN_UP_ERROR);
           }
@@ -120,6 +174,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
         } else {
           setSuccessMessage(NEUTRAL_SIGN_UP_MESSAGE);
           setPassword('');
+          setConfirmPassword('');
         }
       }
     } catch (err) {
@@ -133,9 +188,12 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const resetForm = () => {
     setEmail('');
     setPassword('');
+    setConfirmPassword('');
     setFirstName('');
     setLastName('');
     setBirthDate('');
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     setError('');
     setSuccessMessage('');
   };
@@ -148,6 +206,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition"
+          aria-label="Cerrar"
         >
           <X size={20} />
         </button>
@@ -252,16 +311,94 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
                 />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="••••••••"
                   required
-                  minLength={6}
+                  minLength={isLogin ? 6 : 10}
+                  autoComplete={isLogin ? 'current-password' : 'new-password'}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
               </div>
             </div>
+          )}
+
+          {!isLogin && !isForgotPassword && (
+            <>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5">
+                <p className="text-xs font-medium text-gray-600 mb-1">
+                  Tu contraseña debe contener:
+                </p>
+                {REQUIREMENT_LABELS.map(({ key, label }) => {
+                  const met = passwordChecks[key];
+                  return (
+                    <div
+                      key={key}
+                      className="flex items-center gap-2 text-xs transition-colors duration-200"
+                    >
+                      {met ? (
+                        <Check size={14} className="text-green-600 flex-shrink-0" />
+                      ) : (
+                        <Circle size={14} className="text-gray-300 flex-shrink-0" />
+                      )}
+                      <span className={met ? 'text-green-600' : 'text-gray-400'}>
+                        {label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Confirmar Contraseña
+                </label>
+                <div className="relative">
+                  <Lock
+                    size={20}
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                  />
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="••••••••"
+                    required
+                    minLength={10}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((s) => !s)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
+                    aria-label={showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+                {confirmPassword.length > 0 && (
+                  <p
+                    className={`text-xs mt-1.5 transition-colors duration-200 ${
+                      passwordsMatch ? 'text-green-600' : 'text-red-500'
+                    }`}
+                  >
+                    {passwordsMatch
+                      ? 'Las contraseñas coinciden'
+                      : 'Las contraseñas no coinciden'}
+                  </p>
+                )}
+              </div>
+            </>
           )}
 
           {isLogin && !isForgotPassword && (
@@ -301,7 +438,11 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
           <button
             type="submit"
-            disabled={loading || (hasSiteKey && !captchaValid)}
+            disabled={
+              loading ||
+              (hasSiteKey && !captchaValid) ||
+              (!isLogin && !isForgotPassword && (!allRequirementsMet || !passwordsMatch))
+            }
             className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-blue-400"
           >
             {loading
