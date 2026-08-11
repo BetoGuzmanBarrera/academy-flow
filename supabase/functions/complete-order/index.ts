@@ -8,11 +8,13 @@ function jsonError(message: string, status = 400): Response {
   });
 }
 
+const corsHeaders = getCorsHeaders(null);
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return handleOptions(req);
 
   const origin = req.headers.get('Origin');
-  const corsHeaders = getCorsHeaders(origin);
+  const responseCorsHeaders = getCorsHeaders(origin);
 
   try {
     const authHeader = req.headers.get('Authorization');
@@ -56,40 +58,25 @@ Deno.serve(async (req: Request) => {
     if (!orderId || typeof orderId !== 'string') {
       return jsonError('orderId is required');
     }
-    if (!newStatus || !['pending', 'completed', 'cancelled'].includes(newStatus)) {
+    if (!newStatus || !['in_progress', 'completed', 'cancelled'].includes(newStatus)) {
       return jsonError('Invalid status');
     }
 
-    if (newStatus === 'completed') {
-      const { error } = await adminClient.rpc('complete_order_secure', {
-        p_order_id: orderId,
-        p_admin_id: adminId,
-      });
-      if (error) {
-        return jsonError(error.message, 400);
-      }
-    } else if (newStatus === 'pending') {
-      const { error } = await adminClient.rpc('reopen_order_secure', {
-        p_order_id: orderId,
-        p_admin_id: adminId,
-      });
-      if (error) {
-        return jsonError(error.message, 400);
-      }
-    } else {
-      const { error } = await adminClient
-        .from('orders')
-        .update({ status: 'cancelled' })
-        .eq('id', orderId)
-        .eq('status', 'pending');
-      if (error) {
-        return jsonError(error.message, 400);
-      }
+    // All transitions go through the secure RPC function.
+    // admin_id is derived from the JWT, never from the request body.
+    const { error } = await adminClient.rpc('transition_order_secure', {
+      p_order_id: orderId,
+      p_admin_id: adminId,
+      p_new_status: newStatus,
+    });
+
+    if (error) {
+      return jsonError(error.message, 400);
     }
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      headers: { 'Content-Type': 'application/json', ...responseCorsHeaders },
     });
   } catch (err) {
     console.error('complete-order error:', (err as Error).message);

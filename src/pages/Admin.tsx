@@ -158,7 +158,7 @@ export function Admin() {
     return {
       revenue: completedOrders.reduce((sum, order) => sum + Number(order.total_amount), 0),
       orders: orders.length,
-      pendingOrders: orders.filter((order) => order.status === 'pending').length,
+      pendingOrders: orders.filter((order) => order.status === 'pending' || order.status === 'in_progress').length,
       activeServices: services.filter((service) => service.is_active).length,
       pendingSupport: messages.filter((message) => message.status !== 'resolved').length,
     };
@@ -360,8 +360,8 @@ export function Admin() {
         return;
       }
 
-      const updatedOrder = { ...order, status };
-      setOrders((current) => current.map((item) => (item.id === order.id ? updatedOrder : item)));
+      // Reload all orders to get the server-side state (timestamps, payment_status, etc.)
+      await loadData();
       await logAction('status_change', 'orders', order.id, {
         previous_status: order.status,
         status,
@@ -785,16 +785,24 @@ export function Admin() {
                       <td className="p-4 font-semibold">${Number(order.total_amount).toFixed(2)}</td>
                       <td className="p-4 capitalize">{order.payment_method}</td>
                       <td className="p-4">
-                        <select
-                          value={order.status}
-                          disabled={savingId === order.id}
-                          onChange={(event) => void handleOrderStatus(order, event.target.value as Order['status'])}
-                          className="px-3 py-2 border rounded-lg"
-                        >
-                          <option value="pending">Pendiente</option>
-                          <option value="completed">Completada</option>
-                          <option value="cancelled">Cancelada</option>
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={order.status} />
+                          {getOrderTransitions(order.status).length > 0 ? (
+                            <select
+                              value={order.status}
+                              disabled={savingId === order.id}
+                              onChange={(event) => void handleOrderStatus(order, event.target.value as Order['status'])}
+                              className="px-3 py-2 border rounded-lg text-sm"
+                            >
+                              <option value={order.status} disabled>Cambiar estado…</option>
+                              {getOrderTransitions(order.status).map((t) => (
+                                <option key={t.value} value={t.value}>{t.label}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-xs text-gray-400">Sin acciones</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -981,13 +989,44 @@ function MetricCard({
 }
 
 function StatusBadge({ status }: { status: Order['status'] }) {
-  const classes = {
+  const classes: Record<Order['status'], string> = {
     pending: 'bg-yellow-100 text-yellow-800',
+    in_progress: 'bg-blue-100 text-blue-800',
     completed: 'bg-green-100 text-green-800',
     cancelled: 'bg-red-100 text-red-800',
-  }[status];
+  };
 
-  return <span className={`text-xs px-2 py-1 rounded-full ${classes}`}>{status}</span>;
+  const labels: Record<Order['status'], string> = {
+    pending: 'Pendiente',
+    in_progress: 'En proceso',
+    completed: 'Completada',
+    cancelled: 'Cancelada',
+  };
+
+  return <span className={`text-xs px-2 py-1 rounded-full ${classes[status]}`}>{labels[status]}</span>;
+}
+
+function getOrderTransitions(currentStatus: Order['status']): { value: Order['status']; label: string }[] {
+  switch (currentStatus) {
+    case 'pending':
+      return [
+        { value: 'in_progress', label: 'En proceso' },
+        { value: 'cancelled', label: 'Cancelar' },
+      ];
+    case 'in_progress':
+      return [
+        { value: 'completed', label: 'Completar' },
+        { value: 'cancelled', label: 'Cancelar' },
+      ];
+    case 'completed':
+      return [
+        { value: 'in_progress', label: 'Reabrir' },
+      ];
+    case 'cancelled':
+      return [];
+    default:
+      return [];
+  }
 }
 
 function SystemLine({ ok = false, label }: { ok?: boolean; label: string }) {

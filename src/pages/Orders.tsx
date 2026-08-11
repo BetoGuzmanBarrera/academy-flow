@@ -59,6 +59,8 @@ export function Orders() {
     switch (status) {
       case 'completed':
         return 'bg-green-100 text-green-800';
+      case 'in_progress':
+        return 'bg-blue-100 text-blue-800';
       case 'pending':
         return 'bg-yellow-100 text-yellow-800';
       case 'cancelled':
@@ -72,6 +74,8 @@ export function Orders() {
     switch (status) {
       case 'completed':
         return 'Completado';
+      case 'in_progress':
+        return 'En proceso';
       case 'pending':
         return 'Pendiente';
       case 'cancelled':
