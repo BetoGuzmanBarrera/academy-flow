@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { Cart } from './components/Cart';
 import { AuthModal } from './components/AuthModal';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { SupportChat } from './components/SupportChat';
 import { Home } from './pages/Home';
 import { About } from './pages/About';
@@ -23,6 +24,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isResetPassword, setIsResetPassword] = useState(false);
 
   useEffect(() => {
@@ -94,6 +96,7 @@ function App() {
             currentPage={currentPage}
             onOpenCart={() => setIsCartOpen(true)}
             onOpenAuth={() => setIsAuthModalOpen(true)}
+            onOpenChangePassword={() => setIsChangePasswordOpen(true)}
           />
 
           <main className="flex-1">
@@ -111,6 +114,11 @@ function App() {
           <AuthModal
             isOpen={isAuthModalOpen}
             onClose={() => setIsAuthModalOpen(false)}
+          />
+
+          <ChangePasswordModal
+            isOpen={isChangePasswordOpen}
+            onClose={() => setIsChangePasswordOpen(false)}
           />
 
           <SupportChat />

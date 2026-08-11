@@ -1,4 +1,4 @@
-import { ShoppingCart, User, LogOut, Menu, X, ShieldCheck } from 'lucide-react';
+import { ShoppingCart, User, LogOut, Menu, X, ShieldCheck, KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -9,9 +9,10 @@ interface HeaderProps {
   currentPage: Page;
   onOpenCart: () => void;
   onOpenAuth: () => void;
+  onOpenChangePassword: () => void;
 }
 
-export function Header({ onNavigate, currentPage, onOpenCart, onOpenAuth }: HeaderProps) {
+export function Header({ onNavigate, currentPage, onOpenCart, onOpenAuth, onOpenChangePassword }: HeaderProps) {
   const { user, isAdmin, signOut } = useAuth();
   const { totalItems } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -76,13 +77,22 @@ export function Header({ onNavigate, currentPage, onOpenCart, onOpenAuth }: Head
             )}
 
             {user ? (
-              <button
-                onClick={signOut}
-                className="flex items-center space-x-2 text-gray-700 hover:text-red-600 transition"
-              >
-                <LogOut size={20} />
-                <span className="text-sm">Salir</span>
-              </button>
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={onOpenChangePassword}
+                  className="text-gray-700 hover:text-blue-600 transition flex items-center space-x-2"
+                >
+                  <KeyRound size={20} />
+                  <span className="text-sm">Cambiar Contraseña</span>
+                </button>
+                <button
+                  onClick={signOut}
+                  className="flex items-center space-x-2 text-gray-700 hover:text-red-600 transition"
+                >
+                  <LogOut size={20} />
+                  <span className="text-sm">Salir</span>
+                </button>
+              </div>
             ) : (
               <button
                 onClick={onOpenAuth}
@@ -178,13 +188,25 @@ export function Header({ onNavigate, currentPage, onOpenCart, onOpenAuth }: Head
               </button>
 
               {user ? (
-                <button
-                  onClick={signOut}
-                  className="flex items-center space-x-2 w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-gray-50 rounded"
-                >
-                  <LogOut size={18} />
-                  <span>Salir</span>
-                </button>
+                <>
+                  <button
+                    onClick={() => {
+                      onOpenChangePassword();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="flex items-center space-x-2 w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded"
+                  >
+                    <KeyRound size={18} />
+                    <span>Cambiar Contraseña</span>
+                  </button>
+                  <button
+                    onClick={signOut}
+                    className="flex items-center space-x-2 w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-gray-50 rounded"
+                  >
+                    <LogOut size={18} />
+                    <span>Salir</span>
+                  </button>
+                </>
               ) : (
                 <button
                   onClick={() => {

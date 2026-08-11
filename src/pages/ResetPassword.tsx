@@ -1,39 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Lock, Check, AlertCircle, Eye, EyeOff, Circle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { usePasswordChecks, REQUIREMENT_LABELS, allRequirementsMet } from '../lib/passwordValidation';
 
 interface ResetPasswordProps {
   onComplete: () => void;
 }
-
-interface PasswordChecks {
-  length: boolean;
-  uppercase: boolean;
-  lowercase: boolean;
-  number: boolean;
-  special: boolean;
-}
-
-function usePasswordChecks(password: string): PasswordChecks {
-  return useMemo(
-    () => ({
-      length: password.length >= 10,
-      uppercase: /[A-Z]/.test(password),
-      lowercase: /[a-z]/.test(password),
-      number: /[0-9]/.test(password),
-      special: /[^A-Za-z0-9]/.test(password),
-    }),
-    [password],
-  );
-}
-
-const REQUIREMENT_LABELS: { key: keyof PasswordChecks; label: string }[] = [
-  { key: 'length', label: 'Mínimo 10 caracteres' },
-  { key: 'uppercase', label: 'Una letra mayúscula' },
-  { key: 'lowercase', label: 'Una letra minúscula' },
-  { key: 'number', label: 'Un número' },
-  { key: 'special', label: 'Un carácter especial' },
-];
 
 export function ResetPassword({ onComplete }: ResetPasswordProps) {
   const [password, setPassword] = useState('');
@@ -45,12 +17,7 @@ export function ResetPassword({ onComplete }: ResetPasswordProps) {
   const [success, setSuccess] = useState(false);
 
   const passwordChecks = usePasswordChecks(password);
-  const allRequirementsMet =
-    passwordChecks.length &&
-    passwordChecks.uppercase &&
-    passwordChecks.lowercase &&
-    passwordChecks.number &&
-    passwordChecks.special;
+  const requirementsMet = allRequirementsMet(passwordChecks);
 
   const passwordsMatch = password.length > 0 && password === confirmPassword;
 
@@ -58,7 +25,7 @@ export function ResetPassword({ onComplete }: ResetPasswordProps) {
     e.preventDefault();
     setError('');
 
-    if (!allRequirementsMet) {
+    if (!requirementsMet) {
       setError('Tu contraseña no cumple todos los requisitos.');
       return;
     }
@@ -226,7 +193,7 @@ export function ResetPassword({ onComplete }: ResetPasswordProps) {
 
           <button
             type="submit"
-            disabled={loading || !allRequirementsMet || !passwordsMatch}
+            disabled={loading || !requirementsMet || !passwordsMatch}
             className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-blue-400"
           >
             {loading ? 'Actualizando...' : 'Cambiar Contraseña'}
