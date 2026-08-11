@@ -4,6 +4,10 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { SupportMessage } from '../lib/database.types';
 
+export function openSupportChat() {
+  window.dispatchEvent(new CustomEvent('open-support-chat'));
+}
+
 export function SupportChat() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
@@ -19,6 +23,12 @@ export function SupportChat() {
       loadMessages();
     }
   }, [user, isOpen]);
+
+  useEffect(() => {
+    const handler = () => setIsOpen(true);
+    window.addEventListener('open-support-chat', handler);
+    return () => window.removeEventListener('open-support-chat', handler);
+  }, []);
 
   const loadMessages = async () => {
     if (!user) return;

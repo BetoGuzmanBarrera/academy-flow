@@ -3,6 +3,8 @@ import { Package, Calendar, DollarSign, CreditCard, Loader2, AlertCircle, CheckC
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { ServiceDetails } from '../components/ServiceDetails';
+import { PersonalizedHelp } from '../components/PersonalizedHelp';
+import { openSupportChat } from '../components/SupportChat';
 import type { Order, OrderItem, Service } from '../lib/database.types';
 
 interface OrderWithItems extends Order {
@@ -282,6 +284,13 @@ export function Orders() {
           ))}
         </div>
       )}
+
+      <div className="mt-8">
+        <PersonalizedHelp
+          orderId={orders.length > 0 ? orders[0].id : undefined}
+          onOpenInternalSupport={() => openSupportChat()}
+        />
+      </div>
     </div>
   );
 }

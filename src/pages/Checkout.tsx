@@ -4,6 +4,8 @@ import { useCart } from '../contexts/CartContext';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { CredentialsForm, CredentialData } from '../components/CredentialsForm';
+import { PersonalizedHelp } from '../components/PersonalizedHelp';
+import { openSupportChat } from '../components/SupportChat';
 import { ServiceDetails } from '../components/ServiceDetails';
 import { hasValidDetails } from '../lib/serviceCustomization';
 import type { Category } from '../lib/database.types';
@@ -674,6 +676,10 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
           </div>
         </div>
       )}
+
+      <div className="mt-8">
+        <PersonalizedHelp onOpenInternalSupport={() => openSupportChat()} />
+      </div>
     </div>
   );
 }

@@ -1,4 +1,6 @@
 import { FileText, Clock, DollarSign, Calendar, AlertCircle } from 'lucide-react';
+import { PersonalizedHelp } from '../components/PersonalizedHelp';
+import { openSupportChat } from '../components/SupportChat';
 
 export function Policies() {
   return (
@@ -238,6 +240,10 @@ export function Policies() {
         <p className="text-gray-600">
           Al utilizar nuestros servicios, aceptas estas políticas en su totalidad.
         </p>
+      </div>
+
+      <div className="mt-8">
+        <PersonalizedHelp onOpenInternalSupport={() => openSupportChat()} />
       </div>
     </div>
   );
