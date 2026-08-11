@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { buildCredentialAAD } from '../_shared/aad.ts';
+import { byteaToUint8Array } from '../_shared/bytea.ts';
 import { getCorsHeaders, handleOptions } from '../_shared/cors.ts';
 
 const KEY_VERSION = 1;
@@ -9,15 +10,6 @@ function jsonError(message: string, status = 400, origin: string | null = null):
     status,
     headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) },
   });
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
 }
 
 async function getEncryptionKey(): Promise<CryptoKey> {
@@ -174,8 +166,8 @@ Deno.serve(async (req: Request) => {
 
     try {
       const key = await getEncryptionKey();
-      const iv = base64ToBytes(cred.encryption_iv);
-      const ciphertext = base64ToBytes(cred.encrypted_payload);
+      const iv = byteaToUint8Array(cred.encryption_iv);
+      const ciphertext = byteaToUint8Array(cred.encrypted_payload);
 
       const aad = buildCredentialAAD({
         credential_id: cred.id,
