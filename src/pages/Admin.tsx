@@ -214,12 +214,12 @@ export function Admin() {
   }, [isAdmin]);
 
   const metrics = useMemo(() => {
-    const completedOrders = orders.filter((order) => order.status === 'completed');
+    const paidOrders = orders.filter((order) => order.payment_status === 'paid');
 
     return {
-      revenue: completedOrders.reduce((sum, order) => sum + Number(order.total_amount), 0),
+      revenue: paidOrders.reduce((sum, order) => sum + Number(order.total_amount), 0),
       orders: orders.length,
-      pendingOrders: orders.filter((order) => order.status === 'pending' || order.status === 'in_progress').length,
+      pendingOrders: orders.filter((order) => order.status === 'pending').length,
       activeServices: services.filter((service) => service.is_active).length,
       pendingSupport: messages.filter((message) => message.status !== 'resolved').length,
     };
@@ -655,7 +655,7 @@ export function Admin() {
                     <SystemLine ok label="Precios calculados dentro de PostgreSQL" />
                     <SystemLine ok label="Órdenes creadas como pendientes" />
                     <SystemLine ok label="Credenciales cifradas con AES-256-GCM" />
-                    <SystemLine label="Stripe todavía no está conectado" />
+                    <SystemLine ok label="Pagos con Stripe habilitados" />
                   </div>
                 </section>
               </div>
@@ -822,6 +822,7 @@ export function Admin() {
                     <th className="p-4">Servicios</th>
                     <th className="p-4">Total</th>
                     <th className="p-4">Método</th>
+                    <th className="p-4">Pago</th>
                     <th className="p-4">Estado</th>
                   </tr>
                 </thead>
@@ -845,6 +846,9 @@ export function Admin() {
                       </td>
                       <td className="p-4 font-semibold">${Number(order.total_amount).toFixed(2)}</td>
                       <td className="p-4 capitalize">{order.payment_method}</td>
+                      <td className="p-4">
+                        <PaymentBadge status={order.payment_status} />
+                      </td>
                       <td className="p-4">
                         <div className="flex items-center gap-2">
                           <StatusBadge status={order.status} />
@@ -1059,6 +1063,24 @@ function StatusBadge({ status }: { status: Order['status'] }) {
     in_progress: 'En proceso',
     completed: 'Completada',
     cancelled: 'Cancelada',
+  };
+
+  return <span className={`text-xs px-2 py-1 rounded-full ${classes[status]}`}>{labels[status]}</span>;
+}
+
+function PaymentBadge({ status }: { status: Order['payment_status'] }) {
+  const classes: Record<Order['payment_status'], string> = {
+    paid: 'bg-green-100 text-green-800',
+    pending: 'bg-yellow-100 text-yellow-800',
+    failed: 'bg-red-100 text-red-800',
+    refunded: 'bg-gray-200 text-gray-800',
+  };
+
+  const labels: Record<Order['payment_status'], string> = {
+    paid: 'Pagado',
+    pending: 'Pendiente',
+    failed: 'Fallido',
+    refunded: 'Reembolsado',
   };
 
   return <span className={`text-xs px-2 py-1 rounded-full ${classes[status]}`}>{labels[status]}</span>;
