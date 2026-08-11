@@ -224,10 +224,6 @@ export interface Database {
           id: string;
           order_id: string;
           service_id: string;
-          platform_email: string | null;
-          platform_password: string | null;
-          aleks_account: string | null;
-          additional_info: string | null;
           encrypted_payload: string | null;
           encryption_iv: string | null;
           key_version: number;
@@ -240,10 +236,6 @@ export interface Database {
           id?: string;
           order_id: string;
           service_id: string;
-          platform_email?: string | null;
-          platform_password?: string | null;
-          aleks_account?: string | null;
-          additional_info?: string | null;
           encrypted_payload?: string | null;
           encryption_iv?: string | null;
           key_version?: number;
@@ -256,10 +248,6 @@ export interface Database {
           id?: string;
           order_id?: string;
           service_id?: string;
-          platform_email?: string | null;
-          platform_password?: string | null;
-          aleks_account?: string | null;
-          additional_info?: string | null;
           encrypted_payload?: string | null;
           encryption_iv?: string | null;
           key_version?: number;
@@ -426,19 +414,6 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
-      create_pending_order: {
-        Args: {
-          payment_method_param: string;
-          referral_code_param?: string | null;
-          credentials_param?: Json;
-          billing_param?: Json | null;
-        };
-        Returns: {
-          order_id: string;
-          total_amount: number;
-          discount_amount: number;
-        }[];
-      };
       create_secure_order: {
         Args: {
           p_order_id: string;
