@@ -54,6 +54,7 @@ export function getServiceFields(
   serviceName: string,
   categoryName: string,
 ): FieldDef[] {
+  const cat = categoryName.toUpperCase();
   const instructionsField: FieldDef = {
     key: 'additionalInstructions',
     label: 'Instrucciones adicionales',
@@ -63,7 +64,7 @@ export function getServiceFields(
     placeholder: 'Indica cualquier detalle que debamos conocer (máx. 500 caracteres)',
   };
 
-  if (categoryName === 'ALEKS Universidad') {
+  if (cat === 'ALEKS UNIVERSIDAD') {
     const subjectField: FieldDef = {
       key: 'subject',
       label: 'Materia',
@@ -121,7 +122,7 @@ export function getServiceFields(
     }
   }
 
-  if (categoryName === 'CAMBRIDGE ONE') {
+  if (cat === 'CAMBRIDGE ONE') {
     const levelField: FieldDef = {
       key: 'level',
       label: 'Nivel',
@@ -174,7 +175,7 @@ export function getServiceFields(
     }
   }
 
-  if (categoryName === 'Francés — Biblio Exos') {
+  if (cat === 'FRANCÉS — BIBLIO EXOS') {
     return [
       {
         key: 'week',
@@ -233,14 +234,15 @@ export function normalizeDetails(
   return result;
 }
 
-function getCategoryNameForService(serviceName: string): string {
-  if (serviceName.includes('parcial') || serviceName.includes('Verificación') || serviceName.includes('tareas')) {
+export function getCategoryNameForService(serviceName: string): string {
+  const name = serviceName.toLowerCase();
+  if (name.includes('parcial') || name.includes('verificación') || name.includes('tareas') || name.includes('examen final')) {
     return 'ALEKS Universidad';
   }
-  if (serviceName.includes('Unidad') || serviceName.includes('examen')) {
+  if (name.includes('unidad') || name.includes('guía') || name.includes('examen')) {
     return 'CAMBRIDGE ONE';
   }
-  if (serviceName.includes('francés')) {
+  if (name.includes('francés')) {
     return 'Francés — Biblio Exos';
   }
   return '';

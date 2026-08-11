@@ -3,7 +3,7 @@ import { X, Plus, Minus, Trash2, ShoppingBag, Edit3, AlertCircle } from 'lucide-
 import { useCart } from '../contexts/CartContext';
 import { ServiceDetails } from './ServiceDetails';
 import { ServiceCustomizationModal } from './ServiceCustomizationModal';
-import { hasValidDetails, normalizeDetails, type ServiceDetails as ServiceDetailsType } from '../lib/serviceCustomization';
+import { hasValidDetails, normalizeDetails, getCategoryNameForService, type ServiceDetails as ServiceDetailsType } from '../lib/serviceCustomization';
 import type { Service, Category } from '../lib/database.types';
 
 interface CartProps {
@@ -33,21 +33,10 @@ export function Cart({ isOpen, onClose, onCheckout }: CartProps) {
     setEditingItem(item);
     setEditingCategory({
       id: item.service.category_id,
-      name: getCategoryName(item.service.category_id),
+      name: getCategoryNameForService(item.service.name),
       description: null,
       created_at: '',
     } as Category);
-  };
-
-  const getCategoryName = (categoryId: string): string => {
-    const item = items.find((i) => i.service.category_id === categoryId);
-    return item?.service?.name?.includes('parcial') || item?.service?.name?.includes('Verificación') || item?.service?.name?.includes('tareas')
-      ? 'ALEKS Universidad'
-      : item?.service?.name?.includes('Unidad') || item?.service?.name?.includes('examen')
-        ? 'CAMBRIDGE ONE'
-        : item?.service?.name?.includes('francés')
-          ? 'Francés — Biblio Exos'
-          : '';
   };
 
   const handleEditConfirm = async (details: ServiceDetailsType, _quantity: number) => {
@@ -74,7 +63,7 @@ export function Cart({ isOpen, onClose, onCheckout }: CartProps) {
   };
 
   const allItemsValid = items.every((item) =>
-    hasValidDetails(item.service.name, getCategoryName(item.service.category_id), item.details),
+    hasValidDetails(item.service.name, getCategoryNameForService(item.service.name), item.details),
   );
 
   return (
@@ -106,7 +95,7 @@ export function Cart({ isOpen, onClose, onCheckout }: CartProps) {
           ) : (
             <div className="space-y-4">
               {items.map((item) => {
-                const categoryName = getCategoryName(item.service.category_id);
+                const categoryName = getCategoryNameForService(item.service.name);
                 const detailsValid = hasValidDetails(item.service.name, categoryName, item.details);
 
                 return (
