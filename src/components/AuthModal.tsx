@@ -113,6 +113,14 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
 
     if (!isLogin && !isForgotPassword) {
+      if (!birthDate) {
+        setError('Debes ingresar tu fecha de nacimiento.');
+        return;
+      }
+      if (new Date(birthDate) > new Date()) {
+        setError('La fecha de nacimiento no puede ser futura.');
+        return;
+      }
       if (!allRequirementsMet) {
         setError('Tu contraseña no cumple todos los requisitos.');
         return;
@@ -277,6 +285,8 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     value={birthDate}
                     onChange={(e) => setBirthDate(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                    max={new Date().toISOString().split('T')[0]}
                   />
                 </div>
               </div>
