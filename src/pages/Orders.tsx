@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Package, Calendar, DollarSign, CreditCard, Loader2, AlertCircle, CheckCircle2, Clock, RefreshCw } from 'lucide-react';
+import { Package, Calendar, DollarSign, CreditCard, Loader2, AlertCircle, CheckCircle2, Clock, RefreshCw, LifeBuoy } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { ServiceDetails } from '../components/ServiceDetails';
@@ -89,6 +89,7 @@ export function Orders() {
 
   const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState('');
+  const [helpOrderId, setHelpOrderId] = useState<string | null>(null);
 
   const handleRetryPayment = async (orderId: string) => {
     setPaymentError('');
@@ -279,6 +280,27 @@ export function Orders() {
                     {paymentError}
                   </div>
                 )}
+
+                <div className="mt-4 pt-4 border-t">
+                  <button
+                    onClick={() =>
+                      setHelpOrderId(helpOrderId === order.id ? null : order.id)
+                    }
+                    className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium transition"
+                  >
+                    <LifeBuoy size={16} />
+                    Necesito ayuda con esta orden
+                  </button>
+
+                  {helpOrderId === order.id && (
+                    <div className="mt-4">
+                      <PersonalizedHelp
+                        orderId={order.id}
+                        onOpenInternalSupport={() => openSupportChat()}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -287,7 +309,6 @@ export function Orders() {
 
       <div className="mt-8">
         <PersonalizedHelp
-          orderId={orders.length > 0 ? orders[0].id : undefined}
           onOpenInternalSupport={() => openSupportChat()}
         />
       </div>
