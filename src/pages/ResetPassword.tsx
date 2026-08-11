@@ -1,28 +1,69 @@
-import { useState } from 'react';
-import { Lock, Check, AlertCircle } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Lock, Check, AlertCircle, Eye, EyeOff, Circle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface ResetPasswordProps {
   onComplete: () => void;
 }
 
+interface PasswordChecks {
+  length: boolean;
+  uppercase: boolean;
+  lowercase: boolean;
+  number: boolean;
+  special: boolean;
+}
+
+function usePasswordChecks(password: string): PasswordChecks {
+  return useMemo(
+    () => ({
+      length: password.length >= 10,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      number: /[0-9]/.test(password),
+      special: /[^A-Za-z0-9]/.test(password),
+    }),
+    [password],
+  );
+}
+
+const REQUIREMENT_LABELS: { key: keyof PasswordChecks; label: string }[] = [
+  { key: 'length', label: 'Mínimo 10 caracteres' },
+  { key: 'uppercase', label: 'Una letra mayúscula' },
+  { key: 'lowercase', label: 'Una letra minúscula' },
+  { key: 'number', label: 'Un número' },
+  { key: 'special', label: 'Un carácter especial' },
+];
+
 export function ResetPassword({ onComplete }: ResetPasswordProps) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  const passwordChecks = usePasswordChecks(password);
+  const allRequirementsMet =
+    passwordChecks.length &&
+    passwordChecks.uppercase &&
+    passwordChecks.lowercase &&
+    passwordChecks.number &&
+    passwordChecks.special;
+
+  const passwordsMatch = password.length > 0 && password === confirmPassword;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres');
+    if (!allRequirementsMet) {
+      setError('Tu contraseña no cumple todos los requisitos.');
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (!passwordsMatch) {
       setError('Las contraseñas no coinciden');
       return;
     }
@@ -33,7 +74,7 @@ export function ResetPassword({ onComplete }: ResetPasswordProps) {
       const { error } = await supabase.auth.updateUser({ password });
 
       if (error) {
-        setError(error.message);
+        setError('No se pudo actualizar la contraseña. Inténtalo de nuevo.');
       } else {
         setSuccess(true);
         setTimeout(() => {
@@ -91,15 +132,48 @@ export function ResetPassword({ onComplete }: ResetPasswordProps) {
                 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
               />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="••••••••"
                 required
-                minLength={6}
+                minLength={10}
+                autoComplete="new-password"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
             </div>
+          </div>
+
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5">
+            <p className="text-xs font-medium text-gray-600 mb-1">
+              Tu contraseña debe contener:
+            </p>
+            {REQUIREMENT_LABELS.map(({ key, label }) => {
+              const met = passwordChecks[key];
+              return (
+                <div
+                  key={key}
+                  className="flex items-center gap-2 text-xs transition-colors duration-200"
+                >
+                  {met ? (
+                    <Check size={14} className="text-green-600 flex-shrink-0" />
+                  ) : (
+                    <Circle size={14} className="text-gray-300 flex-shrink-0" />
+                  )}
+                  <span className={met ? 'text-green-600' : 'text-gray-400'}>
+                    {label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
           <div>
@@ -112,15 +186,35 @@ export function ResetPassword({ onComplete }: ResetPasswordProps) {
                 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
               />
               <input
-                type="password"
+                type={showConfirmPassword ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="••••••••"
                 required
-                minLength={6}
+                minLength={10}
+                autoComplete="new-password"
               />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((s) => !s)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
+                aria-label={showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
             </div>
+            {confirmPassword.length > 0 && (
+              <p
+                className={`text-xs mt-1.5 transition-colors duration-200 ${
+                  passwordsMatch ? 'text-green-600' : 'text-red-500'
+                }`}
+              >
+                {passwordsMatch
+                  ? 'Las contraseñas coinciden'
+                  : 'Las contraseñas no coinciden'}
+              </p>
+            )}
           </div>
 
           {error && (
@@ -132,7 +226,7 @@ export function ResetPassword({ onComplete }: ResetPasswordProps) {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !allRequirementsMet || !passwordsMatch}
             className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-blue-400"
           >
             {loading ? 'Actualizando...' : 'Cambiar Contraseña'}
