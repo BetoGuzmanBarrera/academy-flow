@@ -76,7 +76,10 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
     setLoading(true);
 
     try {
-      const attributes: { password: string; nonce?: string } = { password: newPassword };
+      const attributes: { password: string; current_password: string; nonce?: string } = {
+        password: newPassword,
+        current_password: currentPassword,
+      };
       if (needsReauth && nonce) {
         attributes.nonce = nonce;
       }
@@ -85,9 +88,8 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
 
       if (updateError) {
         const isReauthError =
-          updateError.name === 'AuthSessionMissingError' ||
-          (typeof updateError.message === 'string' &&
-            /reauthenticate|re-authenticat|current password/i.test(updateError.message));
+          typeof updateError.message === 'string' &&
+          /reauthenticate|re-authenticat/i.test(updateError.message);
 
         if (isReauthError && !needsReauth) {
           setNeedsReauth(true);
