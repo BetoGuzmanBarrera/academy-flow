@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.3.1';
 import { getCorsHeaders, handleOptions } from '../_shared/cors.ts';
 
@@ -95,45 +95,52 @@ Deno.serve(async (req: Request) => {
       apiVersion: '2025-08-27.basil' as Stripe.LatestApiVersion,
     });
 
-    let sessionUrl: string;
-    let sessionId: string;
-
     if (order.stripe_checkout_session_id) {
       // Existing session — retrieve it
+      let existingSession: Stripe.Checkout.Session;
       try {
-        const existingSession = await stripe.checkout.sessions.retrieve(
+        existingSession = await stripe.checkout.sessions.retrieve(
           order.stripe_checkout_session_id,
         );
-        // If the session is still open or expired, reuse its URL
-        if (existingSession.url) {
-          sessionUrl = existingSession.url;
-          sessionId = existingSession.id;
-        } else {
-          // Session has no URL (e.g. expired) — create a new one
-          const newSession = await createNewSession(
-            stripe,
-            orderId,
-            userId,
-            amountInCents,
-          );
-          sessionUrl = newSession.url!;
-          sessionId = newSession.id;
-          await saveSessionId(adminClient, orderId, sessionId);
-        }
       } catch {
-        // Retrieval failed — create a new session
-        const newSession = await createNewSession(stripe, orderId, userId, amountInCents);
-        sessionUrl = newSession.url!;
-        sessionId = newSession.id;
-        await saveSessionId(adminClient, orderId, sessionId);
+        return jsonError('Payment session is temporarily unavailable. Try again.', 503, origin);
       }
-    } else {
-      // No existing session — create one
-      const newSession = await createNewSession(stripe, orderId, userId, amountInCents);
-      sessionUrl = newSession.url!;
-      sessionId = newSession.id;
-      await saveSessionId(adminClient, orderId, sessionId);
+
+      if (existingSession.status === 'open') {
+        const existingSessionUrl = getValidCheckoutUrl(existingSession.url);
+        if (!existingSessionUrl) {
+          return jsonError('Payment session is temporarily unavailable. Try again.', 503, origin);
+        }
+        return new Response(
+          JSON.stringify({ sessionUrl: existingSessionUrl }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) },
+          },
+        );
+      }
+
+      if (existingSession.status === 'complete') {
+        return jsonError('Payment is being confirmed. Try again shortly.', 409, origin);
+      }
+
+      if (existingSession.status !== 'expired') {
+        return jsonError('Payment session is temporarily unavailable. Try again.', 503, origin);
+      }
     }
+
+    const newSession = await createNewSession(
+      stripe,
+      orderId,
+      userId,
+      amountInCents,
+      order.stripe_checkout_session_id,
+    );
+    const sessionUrl = getValidCheckoutUrl(newSession.url);
+    if (!sessionUrl) {
+      throw new Error('Stripe returned a Checkout Session without a valid URL');
+    }
+    await saveSessionId(adminClient, orderId, newSession.id);
 
     return new Response(
       JSON.stringify({ sessionUrl }),
@@ -153,6 +160,7 @@ async function createNewSession(
   orderId: string,
   userId: string,
   amountInCents: number,
+  previousSessionId: string | null,
 ): Promise<Stripe.Checkout.Session> {
   const siteUrl = Deno.env.get('SITE_URL') || 'https://academy-flow-mx.bolt.host';
 
@@ -182,11 +190,31 @@ async function createNewSession(
     },
     success_url: `${siteUrl}/?payment=success&order=${orderId}`,
     cancel_url: `${siteUrl}/?payment=cancelled&order=${orderId}`,
+  }, {
+    idempotencyKey: getCheckoutSessionIdempotencyKey(orderId, previousSessionId),
   });
 }
 
+function getCheckoutSessionIdempotencyKey(
+  orderId: string,
+  previousSessionId: string | null,
+): string {
+  return `checkout-session:${orderId}:${previousSessionId ?? 'initial'}`;
+}
+
+function getValidCheckoutUrl(value: string | null): string | null {
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 async function saveSessionId(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseClient,
   orderId: string,
   sessionId: string,
 ): Promise<void> {
@@ -197,5 +225,6 @@ async function saveSessionId(
 
   if (error) {
     console.error('Failed to save checkout session ID:', error.code);
+    throw new Error('Failed to save checkout session ID');
   }
 }
