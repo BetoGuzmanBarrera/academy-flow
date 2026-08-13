@@ -755,13 +755,13 @@ export function Admin() {
                         </td>
                         <td className="p-4">
                           <select
-                            value={service.category_id}
+                            value={service.category_id ?? ''}
                             onChange={(event) => setServices((current) => current.map((item) => item.id === service.id ? { ...item, category_id: event.target.value } : item))}
                             className="px-2 py-1 border rounded"
                           >
                             {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                           </select>
-                          <p className="text-xs text-gray-500 mt-2">{categoryName(service.category_id)}</p>
+                          <p className="text-xs text-gray-500 mt-2">{categoryName(service.category_id ?? '')}</p>
                         </td>
                         <td className="p-4">
                           <input
