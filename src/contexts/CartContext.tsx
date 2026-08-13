@@ -39,6 +39,7 @@ interface CartContextType {
     itemId: string,
     serviceName: string,
     details: ServiceDetails,
+    quantity: number,
   ) => Promise<void>;
   removeFromCart: (itemId: string) => Promise<void>;
   clearCart: () => Promise<void>;
@@ -157,11 +158,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     itemId: string,
     serviceName: string,
     details: ServiceDetails,
+    quantity: number,
   ) => {
     const normalized = normalizeDetails(serviceName, details);
+    const limits = getQuantityLimits(serviceName);
+    const integerQuantity = Number.isFinite(quantity) ? Math.trunc(quantity) : limits.min;
+    const validatedQuantity = limits.fixed
+      ? 1
+      : Math.max(limits.min, Math.min(integerQuantity, limits.max ?? Infinity));
+
     const { error } = await supabase
       .from('cart_items')
-      .update({ details: normalized })
+      .update({
+        details: normalized,
+        quantity: validatedQuantity,
+      })
       .eq('id', itemId);
 
     if (!error) {
