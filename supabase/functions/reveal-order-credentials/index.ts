@@ -205,7 +205,7 @@ Deno.serve(async (req: Request) => {
         status: 200,
         headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) },
       });
-    } catch (decryptErr) {
+    } catch {
       await adminClient.from('credential_access_log').insert({
         credential_id: cred.id,
         order_id: cred.order_id,

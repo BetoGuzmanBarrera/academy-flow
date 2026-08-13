@@ -118,7 +118,7 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
       setTimeout(() => {
         handleClose();
       }, 2000);
-    } catch (err) {
+    } catch {
       setError('Ocurrió un error inesperado. Inténtalo de nuevo.');
     } finally {
       setLoading(false);

@@ -48,7 +48,7 @@ export function ResetPassword({ onComplete }: ResetPasswordProps) {
           onComplete();
         }, 2000);
       }
-    } catch (err) {
+    } catch {
       setError('Ocurrió un error al cambiar la contraseña');
     } finally {
       setLoading(false);

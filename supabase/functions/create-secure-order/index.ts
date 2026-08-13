@@ -34,13 +34,6 @@ const ALLOWED_PAYLOAD_KEYS = new Set([
   'service_id', 'platform', 'accessMethod', 'username', 'email', 'password', 'additionalInfo',
 ]);
 
-function jsonError(message: string, status = 400, origin: string | null = null): Response {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) },
-  });
-}
-
 function diagnosticError(
   stage: 'auth' | 'validation' | 'encryption' | 'rpc' | 'response',
   code: string | null,

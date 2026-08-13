@@ -188,7 +188,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           setConfirmPassword('');
         }
       }
-    } catch (err) {
+    } catch {
       setError('Ocurrió un error inesperado');
     } finally {
       setLoading(false);

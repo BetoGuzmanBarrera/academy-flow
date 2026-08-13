@@ -428,7 +428,7 @@ export function Admin() {
         status,
       });
       showNotice('Estado de la orden actualizado');
-    } catch (err) {
+    } catch {
       setError('No se pudo actualizar el estado de la orden. Inténtalo de nuevo.');
     }
 
@@ -507,7 +507,7 @@ export function Admin() {
 
       setRevealedCredential(result);
       window.setTimeout(() => setRevealedCredential(null), 30000);
-    } catch (err) {
+    } catch {
       setRevealError('No se pudieron revelar las credenciales. Inténtalo de nuevo.');
     }
 
