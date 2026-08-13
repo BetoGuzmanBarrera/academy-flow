@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   Boxes,
@@ -165,7 +165,7 @@ export function Admin() {
   const [credentialRows, setCredentialRows] = useState<CredentialMetadata[]>([]);
   const [credentialsLoading, setCredentialsLoading] = useState(false);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!isAdmin) return;
 
     setLoading(true);
@@ -216,11 +216,11 @@ export function Admin() {
       ),
     );
     setLoading(false);
-  };
+  }, [isAdmin]);
 
   useEffect(() => {
-    if (isAdmin) void loadData();
-  }, [isAdmin]);
+    void loadData();
+  }, [loadData]);
 
   const metrics = useMemo(() => {
     const paidOrders = orders.filter((order) => order.payment_status === 'paid');

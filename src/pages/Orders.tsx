@@ -30,39 +30,39 @@ export function Orders() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const loadOrders = async () => {
+      if (!user) {
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+
+      const { data: ordersData } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (ordersData) {
+        const ordersWithItems = await Promise.all(
+          ordersData.map(async (order) => {
+            const { data: items } = await getOrderItemsQuery(order.id);
+
+            return {
+              ...order,
+              items: items || [],
+            };
+          })
+        );
+
+        setOrders(ordersWithItems);
+      }
+
+      setLoading(false);
+    };
+
     void loadOrders();
   }, [user]);
-
-  const loadOrders = async () => {
-    if (!user) {
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-
-    const { data: ordersData } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (ordersData) {
-      const ordersWithItems = await Promise.all(
-        ordersData.map(async (order) => {
-          const { data: items } = await getOrderItemsQuery(order.id);
-
-          return {
-            ...order,
-            items: items || [],
-          };
-        })
-      );
-
-      setOrders(ordersWithItems);
-    }
-
-    setLoading(false);
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {

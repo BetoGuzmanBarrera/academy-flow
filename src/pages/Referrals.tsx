@@ -12,38 +12,38 @@ export function Referrals() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const loadReferralData = async () => {
+      if (!user) return;
+
+      const { data: code } = await supabase
+        .from('referral_codes')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (code) {
+        setReferralCode(code);
+
+        const { data: uses } = await supabase
+          .from('referral_uses')
+          .select('*')
+          .eq('referral_code_id', code.id)
+          .order('created_at', { ascending: false });
+
+        if (uses) {
+          setReferralUses(uses);
+        }
+      }
+
+      setLoading(false);
+    };
+
     if (user) {
-      loadReferralData();
+      void loadReferralData();
     } else {
       setLoading(false);
     }
   }, [user]);
-
-  const loadReferralData = async () => {
-    if (!user) return;
-
-    const { data: code } = await supabase
-      .from('referral_codes')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (code) {
-      setReferralCode(code);
-
-      const { data: uses } = await supabase
-        .from('referral_uses')
-        .select('*')
-        .eq('referral_code_id', code.id)
-        .order('created_at', { ascending: false });
-
-      if (uses) {
-        setReferralUses(uses);
-      }
-    }
-
-    setLoading(false);
-  };
 
   const handleCopyCode = () => {
     if (referralCode) {
