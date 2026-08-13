@@ -72,7 +72,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       .eq('user_id', user.id);
 
     if (!error && data) {
-      setItems(data as any);
+      setItems(data);
     }
     setLoading(false);
   };

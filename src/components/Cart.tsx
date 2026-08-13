@@ -212,7 +212,7 @@ export function Cart({ isOpen, onClose, onCheckout }: CartProps) {
           service={editingItem.service}
           category={editingCategory}
           mode="edit"
-          existingDetails={editingItem.details as any}
+          existingDetails={editingItem.details}
           existingQuantity={editingItem.quantity}
           onConfirm={handleEditConfirm}
           onClose={() => {

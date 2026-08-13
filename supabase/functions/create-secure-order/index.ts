@@ -22,6 +22,12 @@ interface EncryptedCredential {
   key_version: number;
 }
 
+interface ServiceRow {
+  id: string;
+  category_id: string | null;
+  is_active: boolean;
+}
+
 const KEY_VERSION = 1;
 const MAX_CIPHERTEXT_BASE64 = 8192;
 
@@ -233,8 +239,8 @@ Deno.serve(async (req: Request) => {
       .select('id, name')
       .in(
         'id',
-        [...new Set((serviceRows ?? []).map((s: any) => s.category_id))].length > 0
-          ? [...new Set((serviceRows ?? []).map((s: any) => s.category_id))]
+        [...new Set((serviceRows ?? []).map((s: ServiceRow) => s.category_id))].length > 0
+          ? [...new Set((serviceRows ?? []).map((s: ServiceRow) => s.category_id))]
           : ['00000000-0000-0000-0000-000000000000'],
       );
 

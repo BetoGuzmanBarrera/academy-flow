@@ -16,10 +16,25 @@ import {
   ShieldAlert,
   Trash2,
 } from 'lucide-react';
+import type { QueryData } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { ServiceDetails } from '../components/ServiceDetails';
 import type { Category, Json, Order, Service, SupportMessage } from '../lib/database.types';
+
+const getAdminOrdersQuery = () =>
+  supabase
+    .from('orders')
+    .select(`
+      *,
+      items:order_items(
+        *,
+        service:services(*, category:categories(*))
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+type AdminOrder = QueryData<ReturnType<typeof getAdminOrdersQuery>>[number];
 
 type AdminTab = 'dashboard' | 'services' | 'orders' | 'support' | 'credentials';
 
@@ -135,7 +150,7 @@ export function Admin() {
   const [tab, setTab] = useState<AdminTab>('dashboard');
   const [categories, setCategories] = useState<Category[]>([]);
   const [services, setServices] = useState<EditableService[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [newService, setNewService] = useState<NewService>(emptyService);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -160,13 +175,7 @@ export function Admin() {
       await Promise.allSettled([
         supabase.from('categories').select('*').order('name'),
         supabase.from('services').select('*').order('created_at', { ascending: false }),
-        supabase.from('orders').select(`
-          *,
-          items:order_items(
-            *,
-            service:services(*, category:categories(*))
-          )
-        `).order('created_at', { ascending: false }),
+        getAdminOrdersQuery(),
         supabase.from('support_messages').select('*').order('created_at', { ascending: false }),
       ]);
 
@@ -833,12 +842,12 @@ export function Admin() {
                       <td className="p-4 font-mono text-xs">{order.user_id.slice(0, 8)}…</td>
                       <td className="p-4">{new Date(order.created_at).toLocaleString('es-MX')}</td>
                       <td className="p-4">
-                        {(order as any).items?.map((item: any) => (
+                        {order.items?.map((item) => (
                           <div key={item.id} className="mb-2 last:mb-0">
                             <p className="font-medium text-sm">{item.service?.name}</p>
                             <ServiceDetails
                               serviceName={item.service?.name ?? ''}
-                              categoryName={(item.service as any)?.category?.name ?? ''}
+                              categoryName={item.service.category?.name ?? ''}
                               details={item.details}
                             />
                           </div>
