@@ -12,6 +12,16 @@ interface CredentialMetadata {
   hasEncryptedPayload: boolean;
 }
 
+interface CredentialRow {
+  id: string;
+  order_id: string;
+  service_id: string;
+  created_at: string;
+  expires_at: string | null;
+  deleted_at: string | null;
+  encrypted_payload: string | null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return handleOptions(req);
   const origin = req.headers.get('Origin');
@@ -65,7 +75,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Failed to load credentials' }, 500);
   }
 
-  const serviceIds = [...new Set((credentials ?? []).map((c: any) => c.service_id))];
+  const serviceIds = [...new Set((credentials ?? []).map((c: CredentialRow) => c.service_id))];
   const { data: services } = await adminClient
     .from('services')
     .select('id, name')
@@ -76,7 +86,7 @@ Deno.serve(async (req: Request) => {
     serviceNameMap[s.id] = s.name;
   }
 
-  const result: CredentialMetadata[] = (credentials ?? []).map((c: any) => ({
+  const result: CredentialMetadata[] = (credentials ?? []).map((c: CredentialRow) => ({
     credentialId: c.id,
     orderId: c.order_id,
     serviceId: c.service_id,

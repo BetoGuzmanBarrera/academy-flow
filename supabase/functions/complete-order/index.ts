@@ -8,8 +8,6 @@ function jsonError(message: string, status = 400): Response {
   });
 }
 
-const corsHeaders = getCorsHeaders(null);
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return handleOptions(req);
 

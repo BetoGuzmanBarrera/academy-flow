@@ -33,7 +33,7 @@ export interface Database {
       services: {
         Row: {
           id: string;
-          category_id: string;
+          category_id: string | null;
           name: string;
           description: string | null;
           price: number;
@@ -42,7 +42,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          category_id: string;
+          category_id?: string | null;
           name: string;
           description?: string | null;
           price: number;
@@ -51,14 +51,22 @@ export interface Database {
         };
         Update: {
           id?: string;
-          category_id?: string;
+          category_id?: string | null;
           name?: string;
           description?: string | null;
           price?: number;
           is_active?: boolean;
           created_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'services_category_id_fkey';
+            columns: ['category_id'];
+            isOneToOne: false;
+            referencedRelation: 'categories';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       cart_items: {
         Row: {
@@ -85,7 +93,15 @@ export interface Database {
           details?: Json;
           created_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'cart_items_service_id_fkey';
+            columns: ['service_id'];
+            isOneToOne: false;
+            referencedRelation: 'services';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       orders: {
         Row: {
@@ -199,7 +215,22 @@ export interface Database {
           details?: Json;
           created_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'order_items_order_id_fkey';
+            columns: ['order_id'];
+            isOneToOne: false;
+            referencedRelation: 'orders';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'order_items_service_id_fkey';
+            columns: ['service_id'];
+            isOneToOne: false;
+            referencedRelation: 'services';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       profiles: {
         Row: {

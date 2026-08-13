@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import type { Service, Json } from '../lib/database.types';
@@ -39,6 +39,7 @@ interface CartContextType {
     itemId: string,
     serviceName: string,
     details: ServiceDetails,
+    quantity: number,
   ) => Promise<void>;
   removeFromCart: (itemId: string) => Promise<void>;
   clearCart: () => Promise<void>;
@@ -50,11 +51,12 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const userId = user?.id;
   const [items, setItems] = useState<CartItemWithService[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const loadCart = async () => {
-    if (!user) {
+  const loadCart = useCallback(async () => {
+    if (!userId) {
       setItems([]);
       return;
     }
@@ -69,17 +71,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
         details,
         service:services(*)
       `)
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     if (!error && data) {
-      setItems(data as any);
+      setItems(data);
     }
     setLoading(false);
-  };
+  }, [userId]);
 
   useEffect(() => {
-    loadCart();
-  }, [user]);
+    void loadCart();
+  }, [loadCart]);
 
   const addToCart = async (
     serviceId: string,
@@ -157,11 +159,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     itemId: string,
     serviceName: string,
     details: ServiceDetails,
+    quantity: number,
   ) => {
     const normalized = normalizeDetails(serviceName, details);
+    const limits = getQuantityLimits(serviceName);
+    const integerQuantity = Number.isFinite(quantity) ? Math.trunc(quantity) : limits.min;
+    const validatedQuantity = limits.fixed
+      ? 1
+      : Math.max(limits.min, Math.min(integerQuantity, limits.max ?? Infinity));
+
     const { error } = await supabase
       .from('cart_items')
-      .update({ details: normalized })
+      .update({
+        details: normalized,
+        quantity: validatedQuantity,
+      })
       .eq('id', itemId);
 
     if (!error) {

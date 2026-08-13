@@ -39,7 +39,7 @@ export function Cart({ isOpen, onClose, onCheckout }: CartProps) {
     } as Category);
   };
 
-  const handleEditConfirm = async (details: ServiceDetailsType, _quantity: number) => {
+  const handleEditConfirm = async (details: ServiceDetailsType, quantity: number) => {
     if (!editingItem || !editingCategory) return;
 
     const normalized = normalizeDetails(editingItem.service.name, details);
@@ -57,7 +57,7 @@ export function Cart({ isOpen, onClose, onCheckout }: CartProps) {
       return;
     }
 
-    await updateItemDetails(editingItem.id, editingItem.service.name, details);
+    await updateItemDetails(editingItem.id, editingItem.service.name, details, quantity);
     setEditingItem(null);
     setEditingCategory(null);
   };
@@ -212,7 +212,7 @@ export function Cart({ isOpen, onClose, onCheckout }: CartProps) {
           service={editingItem.service}
           category={editingCategory}
           mode="edit"
-          existingDetails={editingItem.details as any}
+          existingDetails={editingItem.details}
           existingQuantity={editingItem.quantity}
           onConfirm={handleEditConfirm}
           onClose={() => {

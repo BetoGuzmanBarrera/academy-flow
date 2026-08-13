@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { MessageCircle, X, Send } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,32 +17,32 @@ export function SupportChat() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { user } = useAuth();
+  const userId = user?.id;
+  const userEmail = user?.email;
+
+  const loadMessages = useCallback(async () => {
+    if (!userId) return;
+
+    const { data, error } = await supabase
+      .from('support_messages')
+      .select('*')
+      .or(`user_id.eq.${userId},and(user_id.is.null,user_email.eq.${userEmail})`)
+      .order('created_at', { ascending: true });
+
+    if (!error && data) {
+      setMessages(data);
+    }
+  }, [userEmail, userId]);
 
   useEffect(() => {
-    if (user && isOpen) {
-      loadMessages();
-    }
-  }, [user, isOpen]);
+    if (isOpen) void loadMessages();
+  }, [isOpen, loadMessages]);
 
   useEffect(() => {
     const handler = () => setIsOpen(true);
     window.addEventListener('open-support-chat', handler);
     return () => window.removeEventListener('open-support-chat', handler);
   }, []);
-
-  const loadMessages = async () => {
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('support_messages')
-      .select('*')
-      .or(`user_id.eq.${user.id},and(user_id.is.null,user_email.eq.${user.email})`)
-      .order('created_at', { ascending: true });
-
-    if (!error && data) {
-      setMessages(data);
-    }
-  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();

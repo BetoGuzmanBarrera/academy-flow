@@ -62,7 +62,13 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
 
   useEffect(() => {
     const loadCategories = async () => {
-      const categoryIds = [...new Set(items.map((item) => item.service.category_id))];
+      const categoryIds = [
+        ...new Set(
+          items
+            .map((item) => item.service.category_id)
+            .filter((id): id is string => id !== null),
+        ),
+      ];
 
       if (categoryIds.length === 0) {
         setCategories({});
@@ -379,7 +385,7 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
           </div>
 
           {items.map((item) => {
-            const category = categories[item.service.category_id];
+            const category = categories[item.service.category_id ?? ''];
             if (!category) return null;
 
             return (
@@ -393,7 +399,7 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
           })}
 
           {!items.every((item) =>
-            hasValidDetails(item.service.name, categories[item.service.category_id]?.name ?? '', item.details),
+            hasValidDetails(item.service.name, categories[item.service.category_id ?? '']?.name ?? '', item.details),
           ) && (
             <div className="flex items-center gap-2 text-amber-600 text-sm mb-3">
               <AlertCircle size={16} />
@@ -403,7 +409,7 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
 
           <button
             onClick={() => setStep('payment')}
-            disabled={!allCredentialsProvided() || !items.every((item) => hasValidDetails(item.service.name, categories[item.service.category_id]?.name ?? '', item.details))}
+            disabled={!allCredentialsProvided() || !items.every((item) => hasValidDetails(item.service.name, categories[item.service.category_id ?? '']?.name ?? '', item.details))}
             className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             Continuar a Confirmación
@@ -422,7 +428,7 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
                     <div className="my-1">
                       <ServiceDetails
                         serviceName={item.service.name}
-                        categoryName={categories[item.service.category_id]?.name ?? ''}
+                        categoryName={categories[item.service.category_id ?? '']?.name ?? ''}
                         details={item.details}
                       />
                     </div>

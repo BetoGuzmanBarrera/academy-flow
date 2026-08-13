@@ -1,15 +1,27 @@
 import { useEffect, useState } from 'react';
 import { Package, Calendar, DollarSign, CreditCard, Loader2, AlertCircle, CheckCircle2, Clock, RefreshCw, LifeBuoy } from 'lucide-react';
+import type { QueryData } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { ServiceDetails } from '../components/ServiceDetails';
 import { PersonalizedHelp } from '../components/PersonalizedHelp';
 import { openSupportChat } from '../components/SupportChat';
 import { STRIPE_MINIMUM_MXN } from '../lib/stripeConstants';
-import type { Order, OrderItem, Service } from '../lib/database.types';
+import type { Order } from '../lib/database.types';
+
+const getOrderItemsQuery = (orderId: string) =>
+  supabase
+    .from('order_items')
+    .select(`
+      *,
+      service:services(*, category:categories(*))
+    `)
+    .eq('order_id', orderId);
+
+type OrderItemWithService = QueryData<ReturnType<typeof getOrderItemsQuery>>[number];
 
 interface OrderWithItems extends Order {
-  items: (OrderItem & { service: Service })[];
+  items: OrderItemWithService[];
 }
 
 export function Orders() {
@@ -18,45 +30,39 @@ export function Orders() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const loadOrders = async () => {
+      if (!user) {
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+
+      const { data: ordersData } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (ordersData) {
+        const ordersWithItems = await Promise.all(
+          ordersData.map(async (order) => {
+            const { data: items } = await getOrderItemsQuery(order.id);
+
+            return {
+              ...order,
+              items: items || [],
+            };
+          })
+        );
+
+        setOrders(ordersWithItems);
+      }
+
+      setLoading(false);
+    };
+
     void loadOrders();
   }, [user]);
-
-  const loadOrders = async () => {
-    if (!user) {
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-
-    const { data: ordersData } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (ordersData) {
-      const ordersWithItems = await Promise.all(
-        ordersData.map(async (order) => {
-          const { data: items } = await supabase
-            .from('order_items')
-            .select(`
-              *,
-              service:services(*, category:categories(*))
-            `)
-            .eq('order_id', order.id);
-
-          return {
-            ...order,
-            items: items || [],
-          };
-        })
-      );
-
-      setOrders(ordersWithItems as any);
-    }
-
-    setLoading(false);
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -234,7 +240,7 @@ export function Orders() {
                         <div className="my-1">
                           <ServiceDetails
                             serviceName={item.service.name}
-                            categoryName={(item.service as any).category?.name ?? ''}
+                            categoryName={item.service.category?.name ?? ''}
                             details={item.details}
                           />
                         </div>
