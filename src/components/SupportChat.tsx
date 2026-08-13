@@ -57,52 +57,25 @@ export function SupportChat() {
     setError('');
 
     try {
-      let userName = name;
-      let userEmail = email;
+      const { data, error: sendError } = await supabase.functions.invoke<{
+        message: SupportMessage;
+      }>('send-support-message', {
+        body: user
+          ? { message: newMessage }
+          : { name, email, message: newMessage },
+      });
 
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('first_name, last_name')
-          .eq('id', user.id)
-          .single();
-
-        if (profile) {
-          userName = `${profile.first_name} ${profile.last_name}`;
-        }
-        userEmail = user.email || email;
-      }
-
-      const { error: insertError } = await supabase
-        .from('support_messages')
-        .insert({
-          user_id: user?.id || null,
-          user_email: userEmail,
-          user_name: userName,
-          message: newMessage,
-        });
-
-      if (insertError) {
+      if (sendError || !data?.message) {
         setError('Error al enviar el mensaje');
       } else {
         setNewMessage('');
         if (user) {
           await loadMessages();
         } else {
-          setMessages([...messages, {
-            id: crypto.randomUUID(),
-            user_id: null,
-            user_email: userEmail,
-            user_name: userName,
-            message: newMessage,
-            status: 'pending',
-            admin_response: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }]);
+          setMessages((currentMessages) => [...currentMessages, data.message]);
         }
       }
-    } catch (err) {
+    } catch {
       setError('Error inesperado al enviar el mensaje');
     } finally {
       setLoading(false);
@@ -173,6 +146,7 @@ export function SupportChat() {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Tu nombre"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  maxLength={100}
                   required
                 />
                 <input
@@ -181,6 +155,7 @@ export function SupportChat() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Tu correo"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  maxLength={320}
                   required
                 />
               </div>
@@ -200,6 +175,7 @@ export function SupportChat() {
                 placeholder="Escribe tu mensaje..."
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={loading}
+                maxLength={4000}
               />
               <button
                 type="submit"
