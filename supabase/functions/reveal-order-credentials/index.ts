@@ -164,6 +164,21 @@ Deno.serve(async (req: Request) => {
       return jsonError('Credential not found', 404, origin);
     }
 
+    if (cred.key_version !== KEY_VERSION) {
+      await adminClient.from('credential_access_log').insert({
+        credential_id: cred.id,
+        order_id: cred.order_id,
+        accessed_by: adminId,
+        requested_credential_id: credentialId,
+        action: 'reveal_denied',
+        success: false,
+        reason_code: 'decrypt_failed',
+        request_id: requestId,
+      });
+
+      return jsonError('Credential could not be decrypted', 500, origin);
+    }
+
     try {
       const key = await getEncryptionKey();
       const iv = byteaToUint8Array(cred.encryption_iv);
