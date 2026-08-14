@@ -164,6 +164,55 @@ Deno.serve(async (req: Request) => {
       return jsonError('Credential not found', 404, origin);
     }
 
+    const denyUnavailableCredential = async (reasonCode: string): Promise<Response> => {
+      await adminClient.from('credential_access_log').insert({
+        credential_id: cred.id,
+        order_id: cred.order_id,
+        accessed_by: adminId,
+        requested_credential_id: credentialId,
+        action: 'reveal_denied',
+        success: false,
+        reason_code: reasonCode,
+        request_id: requestId,
+      });
+
+      return jsonError('Credential is not available', 404, origin);
+    };
+
+    const { data: order, error: orderError } = await adminClient
+      .from('orders')
+      .select('id, status, payment_status, created_at')
+      .eq('id', cred.order_id)
+      .single();
+
+    if (orderError || !order) {
+      return await denyUnavailableCredential('order_unavailable');
+    }
+
+    if (order.status === 'cancelled') {
+      return await denyUnavailableCredential('order_cancelled');
+    }
+
+    if (order.payment_status === 'refunded') {
+      return await denyUnavailableCredential('order_refunded');
+    }
+
+    if (order.status === 'pending' && !cred.expires_at) {
+      const orderCreatedAt = order.created_at ? Date.parse(order.created_at) : Number.NaN;
+      if (!Number.isFinite(orderCreatedAt)) {
+        return await denyUnavailableCredential('order_unavailable');
+      }
+
+      const pendingExpiresAt = orderCreatedAt + 24 * 60 * 60 * 1000;
+      if (pendingExpiresAt <= Date.now()) {
+        return await denyUnavailableCredential('pending_retention_expired');
+      }
+    }
+
+    if (order.status === 'completed' && !cred.expires_at) {
+      return await denyUnavailableCredential('order_unavailable');
+    }
+
     if (cred.key_version !== KEY_VERSION) {
       await adminClient.from('credential_access_log').insert({
         credential_id: cred.id,
