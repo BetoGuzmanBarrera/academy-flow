@@ -19,6 +19,7 @@ import {
 import type { QueryData } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { AdminMfaGate } from '../components/AdminMfaGate';
 import { ServiceDetails } from '../components/ServiceDetails';
 import type { Category, Json, Order, Service, SupportMessage } from '../lib/database.types';
 
@@ -147,6 +148,21 @@ const emptyService: NewService = {
 
 export function Admin() {
   const { user, isAdmin, loading: authLoading } = useAuth();
+
+  return (
+    <AdminMfaGate
+      key={user?.id ?? 'anonymous'}
+      authLoading={authLoading}
+      isAdmin={isAdmin}
+      userId={user?.id ?? null}
+    >
+      <AdminDashboard />
+    </AdminMfaGate>
+  );
+}
+
+function AdminDashboard() {
+  const { user, isAdmin } = useAuth();
   const [tab, setTab] = useState<AdminTab>('dashboard');
   const [categories, setCategories] = useState<Category[]>([]);
   const [services, setServices] = useState<EditableService[]>([]);
@@ -552,20 +568,6 @@ export function Admin() {
 
     setSavingId(null);
   };
-
-  if (authLoading) {
-    return <CenteredLoader />;
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
-        <ShieldAlert size={64} className="mx-auto text-red-500 mb-4" />
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Acceso restringido</h1>
-        <p className="text-gray-600">Esta sección solo está disponible para administradores.</p>
-      </div>
-    );
-  }
 
   const tabs: { id: AdminTab; label: string; icon: typeof BarChart3 }[] = [
     { id: 'dashboard', label: 'Resumen', icon: BarChart3 },
