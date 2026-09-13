@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { buildCredentialAAD } from '../_shared/aad.ts';
+import { hasVerifiedAal2 } from '../_shared/adminMfa.ts';
 import { byteaToUint8Array } from '../_shared/bytea.ts';
 import { getCorsHeaders, handleOptions } from '../_shared/cors.ts';
 
@@ -73,6 +74,20 @@ Deno.serve(async (req: Request) => {
         request_id: crypto.randomUUID(),
       });
       return jsonError('Forbidden', 403, origin);
+    }
+
+    if (!(await hasVerifiedAal2(userClient, jwt))) {
+      await adminClient.from('credential_access_log').insert({
+        credential_id: null,
+        order_id: null,
+        accessed_by: adminId,
+        requested_credential_id: null,
+        action: 'reveal_denied',
+        success: false,
+        reason_code: 'mfa_required',
+        request_id: crypto.randomUUID(),
+      });
+      return jsonError('MFA verification required', 403, origin);
     }
 
     const body = await req.json();
