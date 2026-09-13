@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { hasVerifiedAal2 } from '../_shared/adminMfa.ts';
 import { getCorsHeaders, handleOptions } from '../_shared/cors.ts';
 
 function jsonError(message: string, status = 400): Response {
@@ -48,6 +49,10 @@ Deno.serve(async (req: Request) => {
 
     if (!profile || profile.role !== 'admin') {
       return jsonError('Forbidden', 403);
+    }
+
+    if (!(await hasVerifiedAal2(userClient, jwt))) {
+      return jsonError('MFA verification required', 403);
     }
 
     const body = await req.json();

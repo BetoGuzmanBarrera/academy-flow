@@ -1,5 +1,6 @@
 import { getCorsHeaders, handleOptions } from '../_shared/cors.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { hasVerifiedAal2 } from '../_shared/adminMfa.ts';
 
 interface CredentialMetadata {
   credentialId: string;
@@ -34,9 +35,10 @@ Deno.serve(async (req: Request) => {
     });
 
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader) {
+  if (!authHeader?.startsWith('Bearer ')) {
     return json({ error: 'Unauthorized' }, 401);
   }
+  const jwt = authHeader.substring(7);
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -64,6 +66,10 @@ Deno.serve(async (req: Request) => {
 
   if (profileError || !profile || profile.role !== 'admin') {
     return json({ error: 'Forbidden' }, 403);
+  }
+
+  if (!(await hasVerifiedAal2(userClient, jwt))) {
+    return json({ error: 'MFA verification required' }, 403);
   }
 
   const { data: credentials, error: credError } = await adminClient
