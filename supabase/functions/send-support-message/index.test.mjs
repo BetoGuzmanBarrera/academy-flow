@@ -572,5 +572,5 @@ test('only send-support-message disables gateway JWT verification', () => {
     /^\[functions\.([^\]]+)\]\s*\r?\nverify_jwt\s*=\s*false\s*$/gm,
   )].map((match) => match[1]);
 
-  assert.deepEqual(disabledFunctions, ['send-support-message']);
+  assert.deepEqual(disabledFunctions, ['send-support-message', 'stripe-webhook']);
 });

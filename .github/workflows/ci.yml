@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test admin MFA gate
+        run: node --test tests/admin-mfa-aal2.test.mjs
+
+      - name: Test admin Edge Function AAL2 enforcement
+        run: node --test tests/admin-edge-aal2.test.mjs
+
+      - name: Test checkout session Edge Function
+        run: node --test supabase/functions/create-checkout-session/index.test.mjs
+
+      - name: Test support message Edge Function
+        run: node --test supabase/functions/send-support-message/index.test.mjs
+
+      - name: Build production application
+        run: npm run build
