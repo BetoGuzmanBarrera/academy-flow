@@ -44,6 +44,9 @@ jobs:
       - name: Test admin Edge Function AAL2 enforcement
         run: node --test tests/admin-edge-aal2.test.mjs
 
+      - name: Test admin order cancellation confirmation
+        run: node --test tests/admin-order-cancellation.test.mjs
+
       - name: Test checkout session Edge Function
         run: node --test supabase/functions/create-checkout-session/index.test.mjs
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
   Boxes,
@@ -21,6 +21,10 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { AdminMfaGate } from '../components/AdminMfaGate';
 import { ServiceDetails } from '../components/ServiceDetails';
+import {
+  requiresOrderCancellationConfirmation,
+  runOrderCancellationOnce,
+} from '../lib/adminOrderCancellation';
 import type { Category, Json, Order, Service, SupportMessage } from '../lib/database.types';
 
 const getAdminOrdersQuery = () =>
@@ -180,6 +184,10 @@ function AdminDashboard() {
   const [revealError, setRevealError] = useState('');
   const [credentialRows, setCredentialRows] = useState<CredentialMetadata[]>([]);
   const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [pendingCancellationOrder, setPendingCancellationOrder] = useState<AdminOrder | null>(null);
+  const [cancellationLoading, setCancellationLoading] = useState(false);
+  const [cancellationError, setCancellationError] = useState('');
+  const cancellationLock = useRef(false);
 
   const loadData = useCallback(async () => {
     if (!isAdmin) return;
@@ -417,7 +425,7 @@ function AdminDashboard() {
     setSavingId(null);
   };
 
-  const handleOrderStatus = async (order: Order, status: Order['status']) => {
+  const performOrderStatusChange = async (order: Order, status: Order['status']): Promise<boolean> => {
     setSavingId(order.id);
 
     try {
@@ -426,7 +434,7 @@ function AdminDashboard() {
       if (!accessToken) {
         setError('Debes iniciar sesión para cambiar el estado de una orden.');
         setSavingId(null);
-        return;
+        return false;
       }
 
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/complete-order`, {
@@ -443,7 +451,7 @@ function AdminDashboard() {
       if (!response.ok) {
         setError(result?.error || 'No se pudo actualizar el estado de la orden.');
         setSavingId(null);
-        return;
+        return false;
       }
 
       // Reload all orders to get the server-side state (timestamps, payment_status, etc.)
@@ -453,11 +461,44 @@ function AdminDashboard() {
         status,
       });
       showNotice('Estado de la orden actualizado');
+      setSavingId(null);
+      return true;
     } catch {
       setError('No se pudo actualizar el estado de la orden. Inténtalo de nuevo.');
+      setSavingId(null);
+      return false;
+    }
+  };
+
+  const handleOrderStatusSelection = (order: AdminOrder, status: Order['status']) => {
+    if (requiresOrderCancellationConfirmation(status)) {
+      setCancellationError('');
+      setPendingCancellationOrder(order);
+      return;
     }
 
-    setSavingId(null);
+    void performOrderStatusChange(order, status);
+  };
+
+  const handleConfirmOrderCancellation = async () => {
+    const order = pendingCancellationOrder;
+    if (!order || cancellationLock.current) return;
+
+    setCancellationLoading(true);
+    setCancellationError('');
+
+    try {
+      const updated = await runOrderCancellationOnce(cancellationLock, () =>
+        performOrderStatusChange(order, 'cancelled'),
+      );
+      if (updated) {
+        setPendingCancellationOrder(null);
+      } else if (updated === false) {
+        setCancellationError('No se pudo cancelar la orden. Su estado no cambió. Inténtalo de nuevo.');
+      }
+    } finally {
+      setCancellationLoading(false);
+    }
   };
 
   const loadCredentials = async () => {
@@ -867,7 +908,7 @@ function AdminDashboard() {
                             <select
                               value={order.status}
                               disabled={savingId === order.id}
-                              onChange={(event) => void handleOrderStatus(order, event.target.value as Order['status'])}
+                              onChange={(event) => handleOrderStatusSelection(order, event.target.value as Order['status'])}
                               className="px-3 py-2 border rounded-lg text-sm"
                             >
                               <option value={order.status} disabled>Cambiar estado…</option>
@@ -1031,8 +1072,73 @@ function AdminDashboard() {
           )}
         </>
       )}
+
+      {pendingCancellationOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="cancel-order-title"
+            aria-describedby="cancel-order-description"
+            className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-red-100 p-2 text-red-700">
+                <ShieldAlert size={24} />
+              </div>
+              <div>
+                <h2 id="cancel-order-title" className="text-xl font-bold text-gray-900">
+                  ¿Cancelar la orden #{pendingCancellationOrder.id.slice(0, 8)}?
+                </h2>
+                <p id="cancel-order-description" className="mt-3 text-gray-700">
+                  Cancelar esta orden eliminará de forma irreversible las credenciales asociadas.
+                </p>
+                <p className="mt-2 font-semibold text-red-700">Esta acción no se puede deshacer.</p>
+                <div className="mt-4 rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
+                  <span className="font-semibold">Servicios:</span>{' '}
+                  {getOrderServiceSummary(pendingCancellationOrder)}
+                </div>
+              </div>
+            </div>
+
+            {cancellationError && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {cancellationError}
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingCancellationOrder(null)}
+                disabled={cancellationLoading}
+                className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmOrderCancellation()}
+                disabled={cancellationLoading}
+                className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {cancellationLoading ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                {cancellationLoading ? 'Cancelando…' : 'Cancelar orden'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function getOrderServiceSummary(order: AdminOrder): string {
+  const serviceNames = order.items
+    ?.map((item) => item.service?.name)
+    .filter((name): name is string => Boolean(name));
+
+  return serviceNames?.length ? serviceNames.join(', ') : 'Sin servicios identificados';
 }
 
 function CenteredLoader() {
