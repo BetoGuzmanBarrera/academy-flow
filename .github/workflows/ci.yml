@@ -53,5 +53,8 @@ jobs:
       - name: Test support message Edge Function
         run: node --test supabase/functions/send-support-message/index.test.mjs
 
+      - name: Test referral validation rate limiting
+        run: node --test tests/referral-rate-limit.test.mjs
+
       - name: Build production application
         run: npm run build
