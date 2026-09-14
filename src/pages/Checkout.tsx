@@ -114,6 +114,11 @@ export function Checkout({ onBack, onComplete }: CheckoutProps) {
       .rpc('validate_referral_code', { code_param: referralCode.toUpperCase() })
       .single();
 
+    if (error?.message.includes('Referral code validation rate limit exceeded')) {
+      setReferralError('Demasiados intentos. Espera unos minutos antes de probar otro código.');
+      return;
+    }
+
     if (error || !data?.valid) {
       setReferralError('Código de referido inválido');
       return;
