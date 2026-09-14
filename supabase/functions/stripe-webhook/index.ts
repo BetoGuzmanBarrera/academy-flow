@@ -50,7 +50,7 @@ Deno.serve(async (req: Request) => {
       return jsonError('Invalid signature', 400);
     }
 
-    // ── Idempotency: check if event already processed ────────────────
+    // ── Fast duplicate path; the checkout RPC remains authoritative ─
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -58,11 +58,16 @@ Deno.serve(async (req: Request) => {
       auth: { persistSession: false },
     });
 
-    const { data: existing } = await adminClient
+    const { data: existing, error: eventLookupError } = await adminClient
       .from('stripe_webhook_events')
       .select('event_id')
       .eq('event_id', event.id)
       .maybeSingle();
+
+    if (eventLookupError) {
+      console.error('Failed to check webhook event:', eventLookupError.code);
+      return jsonError('Webhook processing failed', 500);
+    }
 
     if (existing) {
       // Already processed — return 200 without side effects
@@ -142,21 +147,34 @@ Deno.serve(async (req: Request) => {
         return jsonError('No payment intent', 400);
       }
 
-      // ── Mark order as paid via secure RPC ───────────────────────────
-      const { error: rpcError } = await adminClient.rpc('mark_order_paid_secure', {
-        p_order_id: orderId,
-        p_payment_id: paymentIntentId,
-        p_checkout_session_id: session.id,
-      });
+      // ── Atomically claim event and mark order as paid ───────────────
+      const { data: processingResult, error: rpcError } = await adminClient.rpc(
+        'process_stripe_checkout_event_secure', {
+          p_event_id: event.id,
+          p_event_type: event.type,
+          p_order_id: orderId,
+          p_payment_id: paymentIntentId,
+          p_checkout_session_id: session.id,
+        },
+      );
 
       if (rpcError) {
-        console.error('mark_order_paid_secure error:', rpcError.code);
-        // Don't record event as processed — allow Stripe to retry
+        console.error('process_stripe_checkout_event_secure error:', rpcError.code);
+        // The transaction rolls back the event claim so Stripe can retry.
         return jsonError('Could not mark order as paid', 500);
       }
 
-      // ── Record event as processed ──────────────────────────────────
-      await recordEvent(adminClient, event.id, event.type);
+      if (processingResult === 'duplicate') {
+        return new Response(JSON.stringify({ received: true, duplicate: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...getCorsHeaders(null) },
+        });
+      }
+
+      if (processingResult !== 'processed') {
+        console.error('Unexpected Stripe processing result');
+        return jsonError('Webhook processing failed', 500);
+      }
 
       return new Response(JSON.stringify({ received: true, processed: true }), {
         status: 200,
@@ -185,7 +203,10 @@ async function recordEvent(
     .from('stripe_webhook_events')
     .insert({ event_id: eventId, event_type: eventType });
 
-  if (error) {
-    console.error('Failed to record webhook event:', error.code);
+  if (!error || error.code === '23505') {
+    return;
   }
+
+  console.error('Failed to record webhook event:', error.code);
+  throw new Error('Failed to persist webhook event');
 }
