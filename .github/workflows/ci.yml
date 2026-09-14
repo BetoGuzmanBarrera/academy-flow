@@ -47,6 +47,9 @@ jobs:
       - name: Test checkout session Edge Function
         run: node --test supabase/functions/create-checkout-session/index.test.mjs
 
+      - name: Test Stripe webhook atomic processing
+        run: node --test supabase/functions/stripe-webhook/index.test.mjs
+
       - name: Test support message Edge Function
         run: node --test supabase/functions/send-support-message/index.test.mjs
 
