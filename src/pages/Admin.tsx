@@ -22,6 +22,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { AdminMfaGate } from '../components/AdminMfaGate';
 import { ServiceDetails } from '../components/ServiceDetails';
 import {
+  getOrderProcessingBlockReason,
   requiresOrderCancellationConfirmation,
   runOrderCancellationOnce,
 } from '../lib/adminOrderCancellation';
@@ -470,11 +471,43 @@ function AdminDashboard() {
     }
   };
 
-  const handleOrderStatusSelection = (order: AdminOrder, status: Order['status']) => {
+  const handleOrderStatusSelection = async (order: AdminOrder, status: Order['status']) => {
     if (requiresOrderCancellationConfirmation(status)) {
       setCancellationError('');
       setPendingCancellationOrder(order);
       return;
+    }
+
+    if (order.status === 'pending' && status === 'in_progress') {
+      setSavingId(order.id);
+      try {
+        const { data: currentOrder, error: paymentCheckError } = await supabase
+          .from('orders')
+          .select('status, payment_status')
+          .eq('id', order.id)
+          .single();
+
+        if (paymentCheckError || !currentOrder) {
+          setError('No se pudo verificar el estado del pago. Inténtalo de nuevo.');
+          setSavingId(null);
+          return;
+        }
+
+        const processingBlockReason = getOrderProcessingBlockReason(
+          currentOrder.status,
+          status,
+          currentOrder.payment_status,
+        );
+        if (processingBlockReason) {
+          setError(processingBlockReason);
+          setSavingId(null);
+          return;
+        }
+      } catch {
+        setError('No se pudo verificar el estado del pago. Inténtalo de nuevo.');
+        setSavingId(null);
+        return;
+      }
     }
 
     void performOrderStatusChange(order, status);
@@ -908,7 +941,7 @@ function AdminDashboard() {
                             <select
                               value={order.status}
                               disabled={savingId === order.id}
-                              onChange={(event) => handleOrderStatusSelection(order, event.target.value as Order['status'])}
+                              onChange={(event) => void handleOrderStatusSelection(order, event.target.value as Order['status'])}
                               className="px-3 py-2 border rounded-lg text-sm"
                             >
                               <option value={order.status} disabled>Cambiar estado…</option>
