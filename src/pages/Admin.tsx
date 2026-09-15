@@ -26,6 +26,16 @@ import {
   requiresOrderCancellationConfirmation,
   runOrderCancellationOnce,
 } from '../lib/adminOrderCancellation';
+import {
+  emptyAdminOrderFilters,
+  filterAdminOrders,
+  hasActiveAdminOrderFilters,
+} from '../lib/adminOrderFilters';
+import type {
+  AdminOrderFilters,
+  AdminOrderStatusFilter,
+  AdminPaymentStatusFilter,
+} from '../lib/adminOrderFilters';
 import type { Category, Json, Order, Service, SupportMessage } from '../lib/database.types';
 
 const getAdminOrdersQuery = () =>
@@ -188,6 +198,7 @@ function AdminDashboard() {
   const [pendingCancellationOrder, setPendingCancellationOrder] = useState<AdminOrder | null>(null);
   const [cancellationLoading, setCancellationLoading] = useState(false);
   const [cancellationError, setCancellationError] = useState('');
+  const [orderFilters, setOrderFilters] = useState<AdminOrderFilters>(emptyAdminOrderFilters);
   const cancellationLock = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -258,6 +269,12 @@ function AdminDashboard() {
       pendingSupport: messages.filter((message) => message.status !== 'resolved').length,
     };
   }, [orders, services, messages]);
+
+  const filteredOrders = useMemo(
+    () => filterAdminOrders(orders, orderFilters),
+    [orders, orderFilters],
+  );
+  const orderFiltersActive = hasActiveAdminOrderFilters(orderFilters);
 
   const categoryName = (categoryId: string) =>
     categories.find((category) => category.id === categoryId)?.name ?? 'Sin categoría';
@@ -897,67 +914,144 @@ function AdminDashboard() {
           )}
 
           {tab === 'orders' && (
-            <div className="bg-white border rounded-xl overflow-x-auto">
-              <table className="w-full min-w-[850px] text-sm">
-                <thead className="bg-gray-50 text-left">
-                  <tr>
-                    <th className="p-4">Orden</th>
-                    <th className="p-4">Usuario</th>
-                    <th className="p-4">Fecha</th>
-                    <th className="p-4">Servicios</th>
-                    <th className="p-4">Total</th>
-                    <th className="p-4">Método</th>
-                    <th className="p-4">Pago</th>
-                    <th className="p-4">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((order) => (
-                    <tr key={order.id} className="border-t align-top">
-                      <td className="p-4 font-mono">#{order.id.slice(0, 8)}</td>
-                      <td className="p-4 font-mono text-xs">{order.user_id.slice(0, 8)}…</td>
-                      <td className="p-4">{new Date(order.created_at).toLocaleString('es-MX')}</td>
-                      <td className="p-4">
-                        {order.items?.map((item) => (
-                          <div key={item.id} className="mb-2 last:mb-0">
-                            <p className="font-medium text-sm">{item.service?.name}</p>
-                            <ServiceDetails
-                              serviceName={item.service?.name ?? ''}
-                              categoryName={item.service.category?.name ?? ''}
-                              details={item.details}
-                            />
-                          </div>
-                        ))}
-                      </td>
-                      <td className="p-4 font-semibold">${Number(order.total_amount).toFixed(2)}</td>
-                      <td className="p-4 capitalize">{order.payment_method}</td>
-                      <td className="p-4">
-                        <PaymentBadge status={order.payment_status} />
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <StatusBadge status={order.status} />
-                          {getOrderTransitions(order.status).length > 0 ? (
-                            <select
-                              value={order.status}
-                              disabled={savingId === order.id}
-                              onChange={(event) => void handleOrderStatusSelection(order, event.target.value as Order['status'])}
-                              className="px-3 py-2 border rounded-lg text-sm"
-                            >
-                              <option value={order.status} disabled>Cambiar estado…</option>
-                              {getOrderTransitions(order.status).map((t) => (
-                                <option key={t.value} value={t.value}>{t.label}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <span className="text-xs text-gray-400">Sin acciones</span>
-                          )}
-                        </div>
-                      </td>
+            <div className="space-y-4">
+              <div className="rounded-xl border bg-white p-4">
+                <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(160px,1fr)_minmax(160px,1fr)_auto]">
+                  <label className="space-y-1 text-sm font-medium text-gray-700">
+                    <span>Buscar órdenes</span>
+                    <input
+                      type="search"
+                      value={orderFilters.search}
+                      onChange={(event) => setOrderFilters((current) => ({
+                        ...current,
+                        search: event.target.value,
+                      }))}
+                      placeholder="Buscar por orden o servicio"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                    />
+                  </label>
+
+                  <label className="space-y-1 text-sm font-medium text-gray-700">
+                    <span>Estado de orden</span>
+                    <select
+                      value={orderFilters.status}
+                      onChange={(event) => setOrderFilters((current) => ({
+                        ...current,
+                        status: event.target.value as AdminOrderStatusFilter,
+                      }))}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                    >
+                      <option value="all">Todos</option>
+                      <option value="pending">Pendientes</option>
+                      <option value="in_progress">En proceso</option>
+                      <option value="completed">Completadas</option>
+                      <option value="cancelled">Canceladas</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-1 text-sm font-medium text-gray-700">
+                    <span>Estado de pago</span>
+                    <select
+                      value={orderFilters.paymentStatus}
+                      onChange={(event) => setOrderFilters((current) => ({
+                        ...current,
+                        paymentStatus: event.target.value as AdminPaymentStatusFilter,
+                      }))}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                    >
+                      <option value="all">Todos</option>
+                      <option value="paid">Pagado</option>
+                      <option value="pending">Pendiente</option>
+                      <option value="failed">Fallido</option>
+                      <option value="refunded">Reembolsado</option>
+                    </select>
+                  </label>
+
+                  {orderFiltersActive && (
+                    <button
+                      type="button"
+                      onClick={() => setOrderFilters(emptyAdminOrderFilters)}
+                      className="self-end rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Limpiar filtros
+                    </button>
+                  )}
+                </div>
+
+                <p className="mt-3 text-sm text-gray-600" aria-live="polite">
+                  Mostrando {filteredOrders.length} de {orders.length} órdenes
+                </p>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border bg-white">
+                <table className="w-full min-w-[850px] text-sm">
+                  <thead className="bg-gray-50 text-left">
+                    <tr>
+                      <th className="p-4">Orden</th>
+                      <th className="p-4">Usuario</th>
+                      <th className="p-4">Fecha</th>
+                      <th className="p-4">Servicios</th>
+                      <th className="p-4">Total</th>
+                      <th className="p-4">Método</th>
+                      <th className="p-4">Estado de pago</th>
+                      <th className="p-4">Estado de orden</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredOrders.length === 0 ? (
+                      <tr className="border-t">
+                        <td colSpan={8} className="p-8 text-center text-gray-500">
+                          No se encontraron órdenes con estos filtros.
+                        </td>
+                      </tr>
+                    ) : filteredOrders.map((order) => (
+                      <tr key={order.id} className="border-t align-top">
+                        <td className="p-4 font-mono">#{order.id.slice(0, 8)}</td>
+                        <td className="p-4 font-mono text-xs">{order.user_id.slice(0, 8)}…</td>
+                        <td className="p-4">{new Date(order.created_at).toLocaleString('es-MX')}</td>
+                        <td className="p-4">
+                          {order.items?.map((item) => (
+                            <div key={item.id} className="mb-2 last:mb-0">
+                              <p className="font-medium text-sm">{item.service?.name}</p>
+                              <ServiceDetails
+                                serviceName={item.service?.name ?? ''}
+                                categoryName={item.service.category?.name ?? ''}
+                                details={item.details}
+                              />
+                            </div>
+                          ))}
+                        </td>
+                        <td className="p-4 font-semibold">${Number(order.total_amount).toFixed(2)}</td>
+                        <td className="p-4 capitalize">{order.payment_method}</td>
+                        <td className="p-4">
+                          <PaymentBadge status={order.payment_status} />
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status={order.status} />
+                            {getOrderTransitions(order.status).length > 0 ? (
+                              <select
+                                value={order.status}
+                                disabled={savingId === order.id}
+                                onChange={(event) => void handleOrderStatusSelection(order, event.target.value as Order['status'])}
+                                className="px-3 py-2 border rounded-lg text-sm"
+                                aria-label={`Cambiar estado de la orden ${order.id.slice(0, 8)}`}
+                              >
+                                <option value={order.status} disabled>Cambiar estado…</option>
+                                {getOrderTransitions(order.status).map((t) => (
+                                  <option key={t.value} value={t.value}>{t.label}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-xs text-gray-400">Sin acciones</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
@@ -1215,7 +1309,14 @@ function StatusBadge({ status }: { status: Order['status'] }) {
     cancelled: 'Cancelada',
   };
 
-  return <span className={`text-xs px-2 py-1 rounded-full ${classes[status]}`}>{labels[status]}</span>;
+  return (
+    <span
+      className={`text-xs px-2 py-1 rounded-full ${classes[status]}`}
+      aria-label={`Estado de orden: ${labels[status]}`}
+    >
+      {labels[status]}
+    </span>
+  );
 }
 
 function PaymentBadge({ status }: { status: Order['payment_status'] }) {
@@ -1233,7 +1334,14 @@ function PaymentBadge({ status }: { status: Order['payment_status'] }) {
     refunded: 'Reembolsado',
   };
 
-  return <span className={`text-xs px-2 py-1 rounded-full ${classes[status]}`}>{labels[status]}</span>;
+  return (
+    <span
+      className={`text-xs px-2 py-1 rounded-full ${classes[status]}`}
+      aria-label={`Estado de pago: ${labels[status]}`}
+    >
+      {labels[status]}
+    </span>
+  );
 }
 
 function getOrderTransitions(currentStatus: Order['status']): { value: Order['status']; label: string }[] {
