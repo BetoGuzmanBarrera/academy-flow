@@ -36,6 +36,16 @@ import type {
   AdminOrderStatusFilter,
   AdminPaymentStatusFilter,
 } from '../lib/adminOrderFilters';
+import {
+  buildAdminSupportStatusUpdate,
+  emptyAdminSupportFilters,
+  filterAdminSupportMessages,
+  hasActiveAdminSupportFilters,
+} from '../lib/adminSupportFilters';
+import type {
+  AdminSupportFilters,
+  AdminSupportStatusFilter,
+} from '../lib/adminSupportFilters';
 import type { Category, Json, Order, Service, SupportMessage } from '../lib/database.types';
 
 const getAdminOrdersQuery = () =>
@@ -199,6 +209,7 @@ function AdminDashboard() {
   const [cancellationLoading, setCancellationLoading] = useState(false);
   const [cancellationError, setCancellationError] = useState('');
   const [orderFilters, setOrderFilters] = useState<AdminOrderFilters>(emptyAdminOrderFilters);
+  const [supportFilters, setSupportFilters] = useState<AdminSupportFilters>(emptyAdminSupportFilters);
   const cancellationLock = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -275,6 +286,11 @@ function AdminDashboard() {
     [orders, orderFilters],
   );
   const orderFiltersActive = hasActiveAdminOrderFilters(orderFilters);
+  const filteredMessages = useMemo(
+    () => filterAdminSupportMessages(messages, supportFilters),
+    [messages, supportFilters],
+  );
+  const supportFiltersActive = hasActiveAdminSupportFilters(supportFilters);
 
   const categoryName = (categoryId: string) =>
     categories.find((category) => category.id === categoryId)?.name ?? 'Sin categoría';
@@ -655,6 +671,32 @@ function AdminDashboard() {
       setMessages((current) => current.map((item) => (item.id === data.id ? data : item)));
       await logAction('respond', 'support_messages', data.id, { status: data.status });
       showNotice('Respuesta guardada');
+    }
+
+    setSavingId(null);
+  };
+
+  const handleSupportStatusChange = async (
+    message: SupportMessage,
+    status: SupportMessage['status'],
+  ) => {
+    if (status === message.status) return;
+
+    setSavingId(message.id);
+    setError('');
+    const { data, error: updateError } = await supabase
+      .from('support_messages')
+      .update(buildAdminSupportStatusUpdate(status))
+      .eq('id', message.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      setError(reportError('No se pudo actualizar el estado del mensaje', updateError));
+    } else if (data) {
+      setMessages((current) => current.map((item) => (item.id === data.id ? data : item)));
+      await logAction('update_status', 'support_messages', data.id, { status: data.status });
+      showNotice('Estado del mensaje actualizado');
     }
 
     setSavingId(null);
@@ -1167,18 +1209,95 @@ function AdminDashboard() {
 
           {tab === 'support' && (
             <div className="space-y-4">
-              {messages.length === 0 ? (
-                <div className="bg-white border rounded-xl p-10 text-center text-gray-500">No hay mensajes.</div>
-              ) : messages.map((message) => (
+              <div className="rounded-xl border bg-white p-4">
+                <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_auto]">
+                  <label className="space-y-1 text-sm font-medium text-gray-700">
+                    <span>Buscar mensajes</span>
+                    <input
+                      type="search"
+                      value={supportFilters.search}
+                      onChange={(event) => setSupportFilters((current) => ({
+                        ...current,
+                        search: event.target.value,
+                      }))}
+                      placeholder="Mensaje, usuario, nombre o correo"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                    />
+                  </label>
+
+                  <label className="space-y-1 text-sm font-medium text-gray-700">
+                    <span>Estado</span>
+                    <select
+                      value={supportFilters.status}
+                      onChange={(event) => setSupportFilters((current) => ({
+                        ...current,
+                        status: event.target.value as AdminSupportStatusFilter,
+                      }))}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                    >
+                      <option value="all">Todos</option>
+                      <option value="pending">Pendientes</option>
+                      <option value="in_progress">En proceso</option>
+                      <option value="resolved">Resueltos</option>
+                    </select>
+                  </label>
+
+                  {supportFiltersActive && (
+                    <button
+                      type="button"
+                      onClick={() => setSupportFilters(emptyAdminSupportFilters)}
+                      className="self-end rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Limpiar filtros
+                    </button>
+                  )}
+                </div>
+
+                <p className="mt-3 text-sm text-gray-600" aria-live="polite">
+                  Mostrando {filteredMessages.length} de {messages.length} mensajes
+                </p>
+              </div>
+
+              {filteredMessages.length === 0 ? (
+                <div className="bg-white border rounded-xl p-10 text-center text-gray-500">
+                  {messages.length === 0
+                    ? 'No hay mensajes de soporte.'
+                    : 'No se encontraron mensajes con estos filtros.'}
+                </div>
+              ) : filteredMessages.map((message) => (
                 <article key={message.id} className="bg-white border rounded-xl p-5">
-                  <div className="flex flex-wrap justify-between gap-3 mb-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                     <div>
                       <h2 className="font-bold">{message.user_name}</h2>
                       <p className="text-sm text-gray-500">{message.user_email}</p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {message.user_id ? `Usuario #${message.user_id.slice(0, 8)}` : 'Mensaje de invitado'}
+                        {' · '}
+                        {new Date(message.created_at).toLocaleString('es-MX')}
+                      </p>
                     </div>
-                    <span className="text-xs font-semibold px-3 py-1 bg-gray-100 rounded-full h-fit">{message.status}</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <SupportStatusBadge status={message.status} />
+                      <label className="sr-only" htmlFor={`support-status-${message.id}`}>
+                        Estado del mensaje de {message.user_name}
+                      </label>
+                      <select
+                        id={`support-status-${message.id}`}
+                        value={message.status}
+                        disabled={savingId === message.id}
+                        onChange={(event) => void handleSupportStatusChange(
+                          message,
+                          event.target.value as SupportMessage['status'],
+                        )}
+                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-50"
+                      >
+                        <option value="pending">Pendiente</option>
+                        <option value="in_progress">En proceso</option>
+                        <option value="resolved">Resuelto</option>
+                      </select>
+                    </div>
                   </div>
-                  <p className="bg-blue-50 rounded-lg p-4 text-gray-800 mb-4">{message.message}</p>
+                  <p className="bg-blue-50 rounded-lg p-4 text-gray-800 mb-4 whitespace-pre-wrap">{message.message}</p>
                   <textarea
                     value={responseDrafts[message.id] ?? ''}
                     onChange={(event) => setResponseDrafts((current) => ({ ...current, [message.id]: event.target.value }))}
@@ -1191,7 +1310,8 @@ function AdminDashboard() {
                     disabled={savingId === message.id}
                     className="mt-3 flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg disabled:opacity-50"
                   >
-                    <Save size={18} /> Guardar respuesta y resolver
+                    {savingId === message.id ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                    Guardar respuesta y resolver
                   </button>
                 </article>
               ))}
@@ -1338,6 +1458,28 @@ function PaymentBadge({ status }: { status: Order['payment_status'] }) {
     <span
       className={`text-xs px-2 py-1 rounded-full ${classes[status]}`}
       aria-label={`Estado de pago: ${labels[status]}`}
+    >
+      {labels[status]}
+    </span>
+  );
+}
+
+function SupportStatusBadge({ status }: { status: SupportMessage['status'] }) {
+  const classes: Record<SupportMessage['status'], string> = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    in_progress: 'bg-blue-100 text-blue-800',
+    resolved: 'bg-green-100 text-green-800',
+  };
+  const labels: Record<SupportMessage['status'], string> = {
+    pending: 'Pendiente',
+    in_progress: 'En proceso',
+    resolved: 'Resuelto',
+  };
+
+  return (
+    <span
+      className={`rounded-full px-3 py-1 text-xs font-semibold ${classes[status]}`}
+      aria-label={`Estado de soporte: ${labels[status]}`}
     >
       {labels[status]}
     </span>
