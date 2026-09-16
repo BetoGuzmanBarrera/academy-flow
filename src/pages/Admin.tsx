@@ -56,6 +56,22 @@ import {
   validateAdminServiceDraft,
 } from '../lib/adminCatalog';
 import type { AdminServiceDraft } from '../lib/adminCatalog';
+import {
+  canRevealCredential,
+  emptyAdminCredentialAuditFilters,
+  emptyAdminCredentialFilters,
+  filterAdminCredentials,
+  filterCredentialAccessLogs,
+  getCredentialLifecycleState,
+  runCredentialRevealOnce,
+} from '../lib/adminCredentialAudit';
+import type {
+  AdminCredentialAuditFilters,
+  AdminCredentialFilters,
+  AdminCredentialMetadata,
+  CredentialAccessLogEntry,
+  CredentialLifecycleState,
+} from '../lib/adminCredentialAudit';
 import type { Category, Json, Order, Service, SupportMessage } from '../lib/database.types';
 
 const getAdminOrdersQuery = () =>
@@ -147,17 +163,6 @@ function getCredentialFields(decrypted: RevealedCredential['decrypted']): {
   return { methodLabel, fields };
 }
 
-type CredentialMetadata = {
-  credentialId: string;
-  orderId: string;
-  serviceId: string;
-  serviceName: string;
-  createdAt: string;
-  expiresAt: string | null;
-  deletedAt: string | null;
-  hasEncryptedPayload: boolean;
-};
-
 // Los mensajes del motor de base de datos exponen nombres de tablas, restricciones
 // y políticas, así que se registran en la consola y en pantalla se muestra un texto fijo.
 function reportError(context: string, detail: unknown): string {
@@ -209,8 +214,14 @@ function AdminDashboard() {
   const [revealedCredential, setRevealedCredential] = useState<RevealedCredential | null>(null);
   const [revealLoadingId, setRevealLoadingId] = useState<string | null>(null);
   const [revealError, setRevealError] = useState('');
-  const [credentialRows, setCredentialRows] = useState<CredentialMetadata[]>([]);
+  const [pendingRevealCredential, setPendingRevealCredential] = useState<AdminCredentialMetadata | null>(null);
+  const [credentialRows, setCredentialRows] = useState<AdminCredentialMetadata[]>([]);
   const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [credentialAuditLogs, setCredentialAuditLogs] = useState<CredentialAccessLogEntry[]>([]);
+  const [credentialAuditLoading, setCredentialAuditLoading] = useState(false);
+  const [credentialAuditError, setCredentialAuditError] = useState('');
+  const [credentialFilters, setCredentialFilters] = useState<AdminCredentialFilters>(emptyAdminCredentialFilters);
+  const [credentialAuditFilters, setCredentialAuditFilters] = useState<AdminCredentialAuditFilters>(emptyAdminCredentialAuditFilters);
   const [pendingCancellationOrder, setPendingCancellationOrder] = useState<AdminOrder | null>(null);
   const [cancellationLoading, setCancellationLoading] = useState(false);
   const [cancellationError, setCancellationError] = useState('');
@@ -218,6 +229,8 @@ function AdminDashboard() {
   const [supportFilters, setSupportFilters] = useState<AdminSupportFilters>(emptyAdminSupportFilters);
   const cancellationLock = useRef(false);
   const catalogMutationLock = useRef(false);
+  const revealLock = useRef(false);
+  const revealTimeout = useRef<number | null>(null);
 
   const loadData = useCallback(async () => {
     if (!isAdmin) return;
@@ -271,6 +284,19 @@ function AdminDashboard() {
     void loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    if (tab !== 'credentials') {
+      if (revealTimeout.current !== null) window.clearTimeout(revealTimeout.current);
+      revealTimeout.current = null;
+      setRevealedCredential(null);
+      setPendingRevealCredential(null);
+    }
+  }, [tab]);
+
+  useEffect(() => () => {
+    if (revealTimeout.current !== null) window.clearTimeout(revealTimeout.current);
+  }, []);
+
   const metrics = useMemo(() => {
     const paidOrders = orders.filter((order) => order.payment_status === 'paid');
 
@@ -293,6 +319,25 @@ function AdminDashboard() {
     [messages, supportFilters],
   );
   const supportFiltersActive = hasActiveAdminSupportFilters(supportFilters);
+  const credentialRowsWithOrderStatus = useMemo(() => {
+    const statusByOrderId = new Map(orders.map((order) => [order.id, order.status]));
+    return credentialRows.map((credential) => ({
+      ...credential,
+      orderStatus: statusByOrderId.get(credential.orderId) ?? null,
+    }));
+  }, [credentialRows, orders]);
+  const filteredCredentials = useMemo(
+    () => filterAdminCredentials(credentialRowsWithOrderStatus, credentialFilters),
+    [credentialRowsWithOrderStatus, credentialFilters],
+  );
+  const filteredCredentialAuditLogs = useMemo(
+    () => filterCredentialAccessLogs(credentialAuditLogs, credentialAuditFilters),
+    [credentialAuditLogs, credentialAuditFilters],
+  );
+  const credentialAuditActions = useMemo(
+    () => [...new Set(credentialAuditLogs.map((entry) => entry.action))].sort(),
+    [credentialAuditLogs],
+  );
 
   const categoryName = (categoryId: string) =>
     categories.find((category) => category.id === categoryId)?.name ?? 'Sin categoría';
@@ -533,16 +578,46 @@ function AdminDashboard() {
     }
   };
 
+  const loadCredentialAuditLogs = useCallback(async () => {
+    setCredentialAuditLoading(true);
+    setCredentialAuditError('');
+
+    try {
+      const { data, error: auditError } = await supabase
+        .from('credential_access_log')
+        .select('id, credential_id, order_id, requested_credential_id, action, success, reason_code, request_id, created_at')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (auditError) {
+        console.error('No se pudo cargar la auditoría de credenciales:', auditError);
+        setCredentialAuditLogs([]);
+        setCredentialAuditError('No se pudo cargar el historial de accesos. Verifica tu sesión AAL2 e inténtalo de nuevo.');
+      } else {
+        setCredentialAuditLogs(data ?? []);
+      }
+    } catch {
+      setCredentialAuditLogs([]);
+      setCredentialAuditError('No se pudo cargar el historial de accesos. Verifica tu sesión AAL2 e inténtalo de nuevo.');
+    } finally {
+      setCredentialAuditLoading(false);
+    }
+  }, []);
+
   const loadCredentials = async () => {
     setCredentialsLoading(true);
     setRevealError('');
+    if (revealTimeout.current !== null) window.clearTimeout(revealTimeout.current);
+    revealTimeout.current = null;
+    setRevealedCredential(null);
+    setPendingRevealCredential(null);
 
     try {
       const session = await supabase.auth.getSession();
       const accessToken = session.data.session?.access_token;
       if (!accessToken) {
+        setCredentialRows([]);
         setRevealError('Debes iniciar sesión.');
-        setCredentialsLoading(false);
         return;
       }
 
@@ -557,59 +632,68 @@ function AdminDashboard() {
       const result = await response.json();
 
       if (!response.ok) {
+        setCredentialRows([]);
         setRevealError(result?.error || 'No se pudieron cargar las credenciales.');
-        setCredentialsLoading(false);
         return;
       }
 
-      setCredentialRows(result.credentials ?? []);
+      const credentials = (result.credentials ?? []) as Omit<AdminCredentialMetadata, 'orderStatus'>[];
+      setCredentialRows(credentials.map((credential) => ({
+        ...credential,
+        orderStatus: null,
+      })));
+      await loadCredentialAuditLogs();
     } catch {
+      setCredentialRows([]);
       setRevealError('No se pudieron cargar las credenciales. Inténtalo de nuevo.');
+    } finally {
+      setCredentialsLoading(false);
     }
-
-    setCredentialsLoading(false);
   };
 
-  const handleRevealCredential = async (credentialId: string) => {
-    const confirmed = window.confirm('¿Estás seguro de revelar las credenciales? Esta acción se registrará en el historial de auditoría.');
-    if (!confirmed) return;
+  const handleRevealCredential = async (credential: AdminCredentialMetadata) => {
+    await runCredentialRevealOnce(revealLock, async () => {
+      setRevealLoadingId(credential.credentialId);
+      setRevealError('');
 
-    setRevealLoadingId(credentialId);
-    setRevealError('');
+      try {
+        const session = await supabase.auth.getSession();
+        const accessToken = session.data.session?.access_token;
+        if (!accessToken) {
+          setRevealError('Debes iniciar sesión.');
+          return;
+        }
 
-    try {
-      const session = await supabase.auth.getSession();
-      const accessToken = session.data.session?.access_token;
-      if (!accessToken) {
-        setRevealError('Debes iniciar sesión.');
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reveal-order-credentials`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ credentialId: credential.credentialId }),
+        });
+
+        const result = await response.json();
+        await loadCredentialAuditLogs();
+
+        if (!response.ok) {
+          setRevealError(result?.error || 'No se pudieron revelar las credenciales.');
+          return;
+        }
+
+        if (revealTimeout.current !== null) window.clearTimeout(revealTimeout.current);
+        setRevealedCredential(result);
+        setPendingRevealCredential(null);
+        revealTimeout.current = window.setTimeout(() => {
+          setRevealedCredential(null);
+          revealTimeout.current = null;
+        }, 30000);
+      } catch {
+        setRevealError('No se pudieron revelar las credenciales. Inténtalo de nuevo.');
+      } finally {
         setRevealLoadingId(null);
-        return;
       }
-
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reveal-order-credentials`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ credentialId }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        setRevealError(result?.error || 'No se pudieron revelar las credenciales.');
-        setRevealLoadingId(null);
-        return;
-      }
-
-      setRevealedCredential(result);
-      window.setTimeout(() => setRevealedCredential(null), 30000);
-    } catch {
-      setRevealError('No se pudieron revelar las credenciales. Inténtalo de nuevo.');
-    }
-
-    setRevealLoadingId(null);
+    });
   };
 
   const handleSupportResponse = async (message: SupportMessage) => {
@@ -1054,112 +1138,301 @@ function AdminDashboard() {
           )}
 
           {tab === 'credentials' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-600">
-                  Las credenciales están cifradas. Revelarlas genera un registro de auditoría.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => void loadCredentials()}
-                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  <RefreshCw size={18} />
-                  Cargar
-                </button>
-              </div>
-
-              {revealError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                  {revealError}
+            <div className="space-y-8">
+              <section className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">Credenciales cifradas</h2>
+                    <p className="text-sm text-gray-600">
+                      El contenido solo se obtiene tras una confirmación explícita y cada intento queda auditado.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadCredentials()}
+                    disabled={credentialsLoading || credentialAuditLoading}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {(credentialsLoading || credentialAuditLoading) ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+                    {(credentialsLoading || credentialAuditLoading) ? 'Cargando…' : 'Cargar / actualizar'}
+                  </button>
                 </div>
-              )}
 
-              {revealedCredential && (() => {
-                const { methodLabel, fields } = getCredentialFields(revealedCredential.decrypted);
-                return (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-bold flex items-center gap-2">
-                      <Eye size={18} className="text-blue-600" />
-                      Credenciales reveladas
-                    </h3>
+                {revealError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+                    {revealError}
+                  </div>
+                )}
+
+                {revealedCredential && (() => {
+                  const { methodLabel, fields } = getCredentialFields(revealedCredential.decrypted);
+                  return (
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
+                      <div className="mb-3 flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="flex items-center gap-2 font-bold">
+                            <Eye size={18} className="text-blue-600" />
+                            Credencial revelada
+                          </h3>
+                          <p className="mt-1 text-xs text-gray-600">
+                            Orden #{shortId(revealedCredential.orderId)} · {credentialRowsWithOrderStatus.find((item) => item.credentialId === revealedCredential.credentialId)?.serviceName ?? 'Servicio no identificado'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (revealTimeout.current !== null) window.clearTimeout(revealTimeout.current);
+                            revealTimeout.current = null;
+                            setRevealedCredential(null);
+                          }}
+                          className="rounded p-1 hover:bg-blue-100"
+                          title="Ocultar"
+                          aria-label="Ocultar credencial revelada"
+                        >
+                          <EyeOff size={18} />
+                        </button>
+                      </div>
+                      <p className="mb-3 text-xs text-gray-500">Se ocultarán automáticamente en 30 segundos.</p>
+                      {fields.length === 0 && !methodLabel ? (
+                        <p className="text-sm text-gray-600">La credencial no contiene campos visibles reconocidos.</p>
+                      ) : (
+                        <dl className="space-y-2 break-words text-sm">
+                          {methodLabel && (
+                            <div><dt className="inline font-semibold">Método: </dt><dd className="inline font-mono">{methodLabel}</dd></div>
+                          )}
+                          {fields.map((field) => (
+                            <div key={field.label}><dt className="inline font-semibold">{field.label}: </dt><dd className="inline font-mono">{field.value}</dd></div>
+                          ))}
+                        </dl>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                <div className="rounded-xl border bg-white p-4">
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(190px,1fr)_auto]">
+                    <label className="space-y-1 text-sm font-medium text-gray-700">
+                      <span>Buscar credenciales</span>
+                      <input
+                        type="search"
+                        value={credentialFilters.search}
+                        onChange={(event) => setCredentialFilters((current) => ({ ...current, search: event.target.value }))}
+                        placeholder="Orden, servicio o credencial"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm font-medium text-gray-700">
+                      <span>Estado</span>
+                      <select
+                        value={credentialFilters.state}
+                        onChange={(event) => setCredentialFilters((current) => ({
+                          ...current,
+                          state: event.target.value as AdminCredentialFilters['state'],
+                        }))}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                      >
+                        <option value="all">Todos</option>
+                        <option value="available">Vigentes</option>
+                        <option value="expiring_soon">Próximas a expirar</option>
+                        <option value="expired">Expiradas</option>
+                        <option value="deleted">Eliminadas</option>
+                        <option value="unavailable">No disponibles</option>
+                      </select>
+                    </label>
                     <button
                       type="button"
-                      onClick={() => setRevealedCredential(null)}
-                      className="p-1 hover:bg-blue-100 rounded"
-                      title="Ocultar"
+                      onClick={() => setCredentialFilters(emptyAdminCredentialFilters)}
+                      className="self-end rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                     >
-                      <EyeOff size={18} />
+                      Limpiar
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 mb-3">Se ocultarán automáticamente en 30 segundos.</p>
-                  <dl className="space-y-2 text-sm">
-                    {methodLabel && (
-                      <div><dt className="font-semibold inline">Método: </dt><dd className="inline font-mono">{methodLabel}</dd></div>
-                    )}
-                    {fields.map((f, i) => (
-                      <div key={i}><dt className="font-semibold inline">{f.label}: </dt><dd className="inline font-mono">{f.value}</dd></div>
-                    ))}
-                  </dl>
+                  <p className="mt-3 text-sm text-gray-500">
+                    {filteredCredentials.length} de {credentialRows.length} credenciales
+                  </p>
                 </div>
-                );
-              })()}
 
-              {credentialsLoading ? (
-                <CenteredLoader />
-              ) : credentialRows.length === 0 ? (
-                <div className="bg-white border rounded-xl p-10 text-center text-gray-500">
-                  No hay credenciales. Haz clic en "Cargar" para ver las credenciales existentes.
+                {credentialsLoading ? (
+                  <CenteredLoader />
+                ) : credentialRows.length === 0 ? (
+                  <div className="rounded-xl border bg-white p-10 text-center text-gray-500">
+                    No hay credenciales registradas. Usa “Cargar / actualizar” para consultar el inventario seguro.
+                  </div>
+                ) : filteredCredentials.length === 0 ? (
+                  <div className="rounded-xl border bg-white p-10 text-center text-gray-500">
+                    No hay credenciales que coincidan con los filtros.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border bg-white">
+                    <table className="w-full min-w-[1180px] text-sm">
+                      <thead className="bg-gray-50 text-left">
+                        <tr>
+                          <th className="p-4">Credencial / orden</th>
+                          <th className="p-4">Servicio</th>
+                          <th className="p-4">Orden</th>
+                          <th className="p-4">Credencial</th>
+                          <th className="p-4">Fechas</th>
+                          <th className="p-4">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredCredentials.map((credential) => {
+                          const lifecycle = getCredentialLifecycleState(credential);
+                          const revealable = canRevealCredential(credential);
+                          return (
+                            <tr key={credential.credentialId} className="border-t align-top">
+                              <td className="p-4">
+                                <p className="font-mono text-xs">Cred. {shortId(credential.credentialId)}</p>
+                                <p className="mt-1 font-mono text-xs text-gray-500">Orden {shortId(credential.orderId)}</p>
+                              </td>
+                              <td className="p-4">
+                                <p className="font-medium text-gray-900">{credential.serviceName}</p>
+                                <p className="mt-1 font-mono text-xs text-gray-500">{shortId(credential.serviceId)}</p>
+                              </td>
+                              <td className="p-4">
+                                {credential.orderStatus ? <StatusBadge status={credential.orderStatus} /> : <span className="text-gray-400">No disponible</span>}
+                              </td>
+                              <td className="p-4"><CredentialLifecycleBadge state={lifecycle} /></td>
+                              <td className="space-y-1 p-4 text-xs text-gray-600">
+                                <p><span className="font-semibold">Creada:</span> {formatAdminDate(credential.createdAt)}</p>
+                                <p><span className="font-semibold">Actualizada:</span> {formatAdminDate(credential.updatedAt)}</p>
+                                <p><span className="font-semibold">Expira:</span> {formatAdminDate(credential.expiresAt)}</p>
+                                {credential.deletedAt && <p><span className="font-semibold">Eliminada:</span> {formatAdminDate(credential.deletedAt)}</p>}
+                              </td>
+                              <td className="p-4">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRevealError('');
+                                    setPendingRevealCredential(credential);
+                                  }}
+                                  disabled={!revealable || revealLoadingId !== null}
+                                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {revealLoadingId === credential.credentialId ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
+                                  Revelar
+                                </button>
+                                {!revealable && <p className="mt-2 max-w-36 text-xs text-gray-500">No hay material vigente para revelar.</p>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
+              <section className="space-y-4 border-t pt-8">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Auditoría de accesos</h2>
+                  <p className="text-sm text-gray-600">
+                    Se muestran los 100 registros más recientes permitidos por la policy admin+AAL2.
+                  </p>
                 </div>
-              ) : (
-                <div className="bg-white border rounded-xl overflow-x-auto">
-                  <table className="w-full min-w-[700px] text-sm">
-                    <thead className="bg-gray-50 text-left">
-                      <tr>
-                        <th className="p-4">Credencial</th>
-                        <th className="p-4">Orden</th>
-                        <th className="p-4">Servicio</th>
-                        <th className="p-4">Estado</th>
-                        <th className="p-4">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {credentialRows.map((cred) => {
-                        const isDeleted = cred.deletedAt !== null;
-                        const isExpired = cred.expiresAt !== null && new Date(cred.expiresAt) < new Date();
-                        return (
-                          <tr key={cred.credentialId} className="border-t align-top">
-                            <td className="p-4 font-mono text-xs">{cred.credentialId.slice(0, 8)}…</td>
-                            <td className="p-4 font-mono text-xs">{cred.orderId.slice(0, 8)}…</td>
-                            <td className="p-4">{cred.serviceName}</td>
-                            <td className="p-4">
-                              {isDeleted ? (
-                                <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800">Eliminada</span>
-                              ) : isExpired ? (
-                                <span className="text-xs px-2 py-1 rounded-full bg-orange-100 text-orange-800">Vencida</span>
-                              ) : (
-                                <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">Cifrada</span>
-                              )}
+
+                {credentialAuditError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+                    {credentialAuditError}
+                  </div>
+                )}
+
+                <div className="rounded-xl border bg-white p-4">
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_minmax(180px,1fr)_auto]">
+                    <label className="space-y-1 text-sm font-medium text-gray-700">
+                      <span>Buscar auditoría</span>
+                      <input
+                        type="search"
+                        value={credentialAuditFilters.search}
+                        onChange={(event) => setCredentialAuditFilters((current) => ({ ...current, search: event.target.value }))}
+                        placeholder="Orden, credencial, request o motivo"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm font-medium text-gray-700">
+                      <span>Acción</span>
+                      <select
+                        value={credentialAuditFilters.action}
+                        onChange={(event) => setCredentialAuditFilters((current) => ({ ...current, action: event.target.value }))}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                      >
+                        <option value="all">Todas</option>
+                        {credentialAuditActions.map((action) => <option key={action} value={action}>{action}</option>)}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm font-medium text-gray-700">
+                      <span>Resultado</span>
+                      <select
+                        value={credentialAuditFilters.outcome}
+                        onChange={(event) => setCredentialAuditFilters((current) => ({
+                          ...current,
+                          outcome: event.target.value as AdminCredentialAuditFilters['outcome'],
+                        }))}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                      >
+                        <option value="all">Todos</option>
+                        <option value="success">Éxito</option>
+                        <option value="failure">Fallo</option>
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setCredentialAuditFilters(emptyAdminCredentialAuditFilters)}
+                      className="self-end rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+                  <p className="mt-3 text-sm text-gray-500">
+                    {filteredCredentialAuditLogs.length} de {credentialAuditLogs.length} registros cargados
+                  </p>
+                </div>
+
+                {credentialAuditLoading ? (
+                  <CenteredLoader />
+                ) : credentialAuditLogs.length === 0 ? (
+                  <div className="rounded-xl border bg-white p-10 text-center text-gray-500">
+                    No hay registros de auditoría para mostrar.
+                  </div>
+                ) : filteredCredentialAuditLogs.length === 0 ? (
+                  <div className="rounded-xl border bg-white p-10 text-center text-gray-500">
+                    No hay registros que coincidan con los filtros.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border bg-white">
+                    <table className="w-full min-w-[1180px] text-sm">
+                      <thead className="bg-gray-50 text-left">
+                        <tr>
+                          <th className="p-4">Fecha</th>
+                          <th className="p-4">Acción</th>
+                          <th className="p-4">Resultado</th>
+                          <th className="p-4">Orden / credencial</th>
+                          <th className="p-4">Solicitada</th>
+                          <th className="p-4">Motivo / request</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredCredentialAuditLogs.map((entry) => (
+                          <tr key={entry.id} className="border-t align-top">
+                            <td className="p-4 text-xs text-gray-600">{formatAdminDate(entry.created_at)}</td>
+                            <td className="p-4"><span className="rounded-full bg-gray-100 px-2 py-1 font-mono text-xs text-gray-800">{entry.action}</span></td>
+                            <td className="p-4"><AuditOutcomeBadge success={entry.success} /></td>
+                            <td className="space-y-1 p-4 font-mono text-xs">
+                              <p>Orden: {shortId(entry.order_id)}</p>
+                              <p>Cred.: {shortId(entry.credential_id)}</p>
                             </td>
-                            <td className="p-4">
-                              <button
-                                type="button"
-                                onClick={() => void handleRevealCredential(cred.credentialId)}
-                                disabled={isDeleted || isExpired || revealLoadingId === cred.credentialId}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg disabled:opacity-50"
-                              >
-                                {revealLoadingId === cred.credentialId ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
-                                Revelar
-                              </button>
+                            <td className="p-4 font-mono text-xs">{shortId(entry.requested_credential_id)}</td>
+                            <td className="space-y-1 p-4 text-xs text-gray-600">
+                              <p><span className="font-semibold">Motivo:</span> {entry.reason_code ?? '—'}</p>
+                              <p className="font-mono"><span className="font-sans font-semibold">Request:</span> {shortId(entry.request_id)}</p>
                             </td>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
             </div>
           )}
 
@@ -1274,6 +1547,62 @@ function AdminDashboard() {
             </div>
           )}
         </>
+      )}
+
+      {pendingRevealCredential && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reveal-credential-title"
+            aria-describedby="reveal-credential-description"
+            className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-blue-100 p-2 text-blue-700">
+                <KeyRound size={24} />
+              </div>
+              <div>
+                <h2 id="reveal-credential-title" className="text-xl font-bold text-gray-900">
+                  Confirmar revelado de credencial
+                </h2>
+                <p id="reveal-credential-description" className="mt-2 text-sm text-gray-700">
+                  Esta acción descifrará temporalmente la credencial y quedará registrada en la auditoría.
+                </p>
+                <div className="mt-4 rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
+                  <p><span className="font-semibold">Orden:</span> #{shortId(pendingRevealCredential.orderId)}</p>
+                  <p className="mt-1"><span className="font-semibold">Servicio:</span> {pendingRevealCredential.serviceName}</p>
+                </div>
+              </div>
+            </div>
+
+            {revealError && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {revealError}
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setPendingRevealCredential(null)}
+                disabled={revealLoadingId !== null}
+                className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRevealCredential(pendingRevealCredential)}
+                disabled={revealLoadingId !== null}
+                className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {revealLoadingId === pendingRevealCredential.credentialId ? <Loader2 size={18} className="animate-spin" /> : <Eye size={18} />}
+                {revealLoadingId === pendingRevealCredential.credentialId ? 'Revelando…' : 'Revelar credencial'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {editingService && (
@@ -1488,6 +1817,44 @@ function CenteredLoader() {
     <div className="min-h-64 flex items-center justify-center">
       <Loader2 size={40} className="animate-spin text-blue-600" />
     </div>
+  );
+}
+
+function shortId(value: string | null): string {
+  if (!value) return '—';
+  return value.length > 8 ? `${value.slice(0, 8)}…` : value;
+}
+
+function formatAdminDate(value: string | null): string {
+  if (!value) return 'Sin fecha';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Fecha inválida' : date.toLocaleString('es-MX');
+}
+
+function CredentialLifecycleBadge({ state }: { state: CredentialLifecycleState }) {
+  const styles: Record<CredentialLifecycleState, string> = {
+    available: 'bg-green-100 text-green-800',
+    expiring_soon: 'bg-yellow-100 text-yellow-800',
+    expired: 'bg-orange-100 text-orange-800',
+    deleted: 'bg-red-100 text-red-800',
+    unavailable: 'bg-gray-200 text-gray-800',
+  };
+  const labels: Record<CredentialLifecycleState, string> = {
+    available: 'Vigente',
+    expiring_soon: 'Próxima a expirar',
+    expired: 'Expirada',
+    deleted: 'Eliminada',
+    unavailable: 'No disponible',
+  };
+
+  return <span className={`rounded-full px-2 py-1 text-xs font-semibold ${styles[state]}`}>{labels[state]}</span>;
+}
+
+function AuditOutcomeBadge({ success }: { success: boolean }) {
+  return (
+    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+      {success ? 'Éxito' : 'Fallo'}
+    </span>
   );
 }
 
