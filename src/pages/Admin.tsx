@@ -10,11 +10,13 @@ import {
   Loader2,
   MessageSquare,
   PackageCheck,
+  Pencil,
   Plus,
   RefreshCw,
   Save,
   ShieldAlert,
   Trash2,
+  X,
 } from 'lucide-react';
 import type { QueryData } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
@@ -46,6 +48,14 @@ import type {
   AdminSupportFilters,
   AdminSupportStatusFilter,
 } from '../lib/adminSupportFilters';
+import {
+  getAdminServiceStatusLabel,
+  replaceAdminService,
+  runCatalogMutationOnce,
+  serviceToAdminDraft,
+  validateAdminServiceDraft,
+} from '../lib/adminCatalog';
+import type { AdminServiceDraft } from '../lib/adminCatalog';
 import type { Category, Json, Order, Service, SupportMessage } from '../lib/database.types';
 
 const getAdminOrdersQuery = () =>
@@ -63,15 +73,6 @@ const getAdminOrdersQuery = () =>
 type AdminOrder = QueryData<ReturnType<typeof getAdminOrdersQuery>>[number];
 
 type AdminTab = 'dashboard' | 'services' | 'orders' | 'support' | 'credentials';
-
-type EditableService = Service & { draftPrice: string };
-
-type NewService = {
-  name: string;
-  description: string;
-  price: string;
-  categoryId: string;
-};
 
 type RevealedCredential = {
   credentialId: string;
@@ -164,11 +165,12 @@ function reportError(context: string, detail: unknown): string {
   return `${context}. Inténtalo de nuevo o recarga el panel.`;
 }
 
-const emptyService: NewService = {
+const emptyService: AdminServiceDraft = {
   name: '',
   description: '',
   price: '',
   categoryId: '',
+  isActive: true,
 };
 
 export function Admin() {
@@ -190,10 +192,14 @@ function AdminDashboard() {
   const { user, isAdmin } = useAuth();
   const [tab, setTab] = useState<AdminTab>('dashboard');
   const [categories, setCategories] = useState<Category[]>([]);
-  const [services, setServices] = useState<EditableService[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
-  const [newService, setNewService] = useState<NewService>(emptyService);
+  const [newService, setNewService] = useState<AdminServiceDraft>(emptyService);
+  const [editingService, setEditingService] = useState<{
+    id: string;
+    draft: AdminServiceDraft;
+  } | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [responseDrafts, setResponseDrafts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -211,6 +217,7 @@ function AdminDashboard() {
   const [orderFilters, setOrderFilters] = useState<AdminOrderFilters>(emptyAdminOrderFilters);
   const [supportFilters, setSupportFilters] = useState<AdminSupportFilters>(emptyAdminSupportFilters);
   const cancellationLock = useRef(false);
+  const catalogMutationLock = useRef(false);
 
   const loadData = useCallback(async () => {
     if (!isAdmin) return;
@@ -245,12 +252,7 @@ function AdminDashboard() {
     }
 
     setCategories(categoriesResult?.data ?? []);
-    setServices(
-      (servicesResult?.data ?? []).map((service) => ({
-        ...service,
-        draftPrice: String(service.price),
-      })),
-    );
+    setServices(servicesResult?.data ?? []);
     setOrders(ordersResult?.data ?? []);
     setMessages(messagesResult?.data ?? []);
     setNewService((current) => ({
@@ -344,119 +346,83 @@ function AdminDashboard() {
 
   const handleCreateService = async (event: React.FormEvent) => {
     event.preventDefault();
-    const price = Number(newService.price);
-
-    if (!newService.name.trim() || !newService.categoryId || !Number.isFinite(price) || price < 0) {
-      setError('Completa el nombre, la categoría y un precio válido.');
+    const validation = validateAdminServiceDraft(newService);
+    if (!validation.valid) {
+      setError(validation.error);
       return;
     }
 
-    setSavingId('new-service');
-    setError('');
+    await runCatalogMutationOnce(catalogMutationLock, async () => {
+      setSavingId('new-service');
+      setError('');
 
-    const { data, error: insertError } = await supabase
-      .from('services')
-      .insert({
-        name: newService.name.trim(),
-        description: newService.description.trim() || null,
-        price,
-        category_id: newService.categoryId,
-        is_active: true,
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      setError(reportError('No se pudo crear el servicio', insertError));
-    } else if (data) {
-      setServices((current) => [{ ...data, draftPrice: String(data.price) }, ...current]);
-      setNewService({ ...emptyService, categoryId: newService.categoryId });
-      await logAction('create', 'services', data.id, { name: data.name, price: data.price });
-      showNotice('Servicio creado');
-    }
-
-    setSavingId(null);
-  };
-
-  const handleSaveService = async (service: EditableService) => {
-    const price = Number(service.draftPrice);
-    if (!Number.isFinite(price) || price < 0) {
-      setError('El precio debe ser un número igual o mayor que cero.');
-      return;
-    }
-
-    setSavingId(service.id);
-    const { data, error: updateError } = await supabase
-      .from('services')
-      .update({
-        name: service.name.trim(),
-        description: service.description?.trim() || null,
-        category_id: service.category_id,
-        price,
-        is_active: service.is_active,
-      })
-      .eq('id', service.id)
-      .select()
-      .single();
-
-    if (updateError) {
-      setError(reportError('No se pudo guardar el servicio', updateError));
-    } else if (data) {
-      setServices((current) =>
-        current.map((item) =>
-          item.id === data.id ? { ...data, draftPrice: String(data.price) } : item,
-        ),
-      );
-      await logAction('update', 'services', data.id, {
-        name: data.name,
-        price: data.price,
-        is_active: data.is_active,
-      });
-      showNotice('Servicio actualizado');
-    }
-
-    setSavingId(null);
-  };
-
-  const handleDeleteService = async (service: EditableService) => {
-    const confirmed = window.confirm(
-      `¿Eliminar “${service.name}”? Si ya fue comprado, la base de datos puede impedirlo para conservar el historial.`,
-    );
-    if (!confirmed) return;
-
-    setSavingId(service.id);
-    const { error: deleteError } = await supabase.from('services').delete().eq('id', service.id);
-
-    if (deleteError) {
-      if (deleteError.code === '23503') {
-        const { error: deactivateError } = await supabase
+      try {
+        const { data, error: insertError } = await supabase
           .from('services')
-          .update({ is_active: false })
-          .eq('id', service.id);
+          .insert(validation.payload)
+          .select()
+          .single();
 
-        if (deactivateError) {
-          console.error('No se pudo desactivar el servicio:', { code: deactivateError.code });
-          setError(reportError('No se pudo eliminar el servicio', deactivateError));
-        } else {
-          setServices((current) =>
-            current.map((item) => (item.id === service.id ? { ...item, is_active: false } : item)),
-          );
-          await logAction('deactivate', 'services', service.id, { name: service.name });
-          showNotice(
-            'Este servicio tiene historial de pedidos, por lo que no puede eliminarse. Se desactivó correctamente y ya no aparecerá para nuevos clientes.',
-          );
+        if (insertError) {
+          setError(reportError('No se pudo crear el servicio', insertError));
+        } else if (data) {
+          setServices((current) => [data, ...current]);
+          setNewService({ ...emptyService, categoryId: newService.categoryId });
+          await logAction('create', 'services', data.id, {
+            name: data.name,
+            price: data.price,
+            is_active: data.is_active,
+          });
+          showNotice('Servicio creado');
         }
-      } else {
-        console.error('No se pudo eliminar el servicio:', { code: deleteError.code });
-        setError(reportError('No se pudo eliminar el servicio', deleteError));
+      } finally {
+        setSavingId(null);
       }
-    } else {
-      setServices((current) => current.filter((item) => item.id !== service.id));
-      await logAction('delete', 'services', service.id, { name: service.name });
-      showNotice('Servicio eliminado');
+    });
+  };
+
+  const handleEditService = (service: Service) => {
+    setError('');
+    setEditingService({ id: service.id, draft: serviceToAdminDraft(service) });
+  };
+
+  const handleSaveService = async () => {
+    if (!editingService) return;
+
+    const validation = validateAdminServiceDraft(editingService.draft);
+    if (!validation.valid) {
+      setError(validation.error);
+      return;
     }
 
-    setSavingId(null);
+    await runCatalogMutationOnce(catalogMutationLock, async () => {
+      setSavingId(editingService.id);
+      setError('');
+
+      try {
+        const { data, error: updateError } = await supabase
+          .from('services')
+          .update(validation.payload)
+          .eq('id', editingService.id)
+          .select()
+          .single();
+
+        if (updateError) {
+          setError(reportError('No se pudo guardar el servicio', updateError));
+        } else if (data) {
+          setServices((current) => replaceAdminService(current, data));
+          await logAction('update', 'services', data.id, {
+            name: data.name,
+            price: data.price,
+            is_active: data.is_active,
+          });
+          setEditingService(null);
+          showNotice('Servicio actualizado');
+        }
+      } finally {
+        setSavingId(null);
+      }
+    });
   };
 
   const performOrderStatusChange = async (order: Order, status: Order['status']): Promise<boolean> => {
@@ -860,12 +826,25 @@ function AdminDashboard() {
                       placeholder="Descripción"
                       className="px-3 py-2 border rounded-lg"
                     />
+                    <select
+                      value={newService.isActive ? 'active' : 'inactive'}
+                      onChange={(event) => setNewService((current) => ({
+                        ...current,
+                        isActive: event.target.value === 'active',
+                      }))}
+                      className="px-3 py-2 border rounded-lg"
+                      aria-label="Disponibilidad inicial"
+                    >
+                      <option value="active">Activo</option>
+                      <option value="inactive">Inactivo</option>
+                    </select>
                   </div>
                   <button
                     disabled={savingId === 'new-service'}
                     className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded-lg disabled:opacity-50"
                   >
-                    <Plus size={18} /> Crear servicio
+                    {savingId === 'new-service' ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+                    {savingId === 'new-service' ? 'Creando…' : 'Crear servicio'}
                   </button>
                 </form>
               </div>
@@ -882,70 +861,47 @@ function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {services.map((service) => (
-                      <tr key={service.id} className="border-t align-top">
-                        <td className="p-4 space-y-2">
-                          <input
-                            value={service.name}
-                            onChange={(event) => setServices((current) => current.map((item) => item.id === service.id ? { ...item, name: event.target.value } : item))}
-                            className="w-full font-semibold px-2 py-1 border rounded"
-                          />
-                          <textarea
-                            value={service.description ?? ''}
-                            onChange={(event) => setServices((current) => current.map((item) => item.id === service.id ? { ...item, description: event.target.value } : item))}
-                            className="w-full px-2 py-1 border rounded text-gray-600"
-                            rows={2}
-                          />
+                    {services.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-10 text-center text-gray-500">
+                          No hay servicios registrados todavía.
+                        </td>
+                      </tr>
+                    ) : services.map((service) => (
+                      <tr key={service.id} className="border-t align-middle">
+                        <td className="p-4">
+                          <p className="font-semibold text-gray-900">{service.name}</p>
+                          <p className="mt-1 max-w-xl text-sm text-gray-600">
+                            {service.description || 'Sin descripción'}
+                          </p>
                         </td>
                         <td className="p-4">
-                          <select
-                            value={service.category_id ?? ''}
-                            onChange={(event) => setServices((current) => current.map((item) => item.id === service.id ? { ...item, category_id: event.target.value } : item))}
-                            className="px-2 py-1 border rounded"
+                          {categoryName(service.category_id ?? '')}
+                        </td>
+                        <td className="p-4">
+                          {Number(service.price).toLocaleString('es-MX', {
+                            style: 'currency',
+                            currency: 'MXN',
+                          })}
+                        </td>
+                        <td className="p-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            service.is_active
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-200 text-gray-700'
+                          }`}>
+                            {getAdminServiceStatusLabel(service.is_active)}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <button
+                            type="button"
+                            onClick={() => handleEditService(service)}
+                            disabled={savingId !== null}
+                            className="inline-flex items-center gap-2 rounded-lg border border-blue-200 px-3 py-2 font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                           >
-                            {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                          </select>
-                          <p className="text-xs text-gray-500 mt-2">{categoryName(service.category_id ?? '')}</p>
-                        </td>
-                        <td className="p-4">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={service.draftPrice}
-                            onChange={(event) => setServices((current) => current.map((item) => item.id === service.id ? { ...item, draftPrice: event.target.value } : item))}
-                            className="w-28 px-2 py-1 border rounded"
-                          />
-                        </td>
-                        <td className="p-4">
-                          <input
-                            type="checkbox"
-                            checked={service.is_active}
-                            onChange={(event) => setServices((current) => current.map((item) => item.id === service.id ? { ...item, is_active: event.target.checked } : item))}
-                            className="w-5 h-5"
-                          />
-                        </td>
-                        <td className="p-4">
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => void handleSaveService(service)}
-                              disabled={savingId === service.id}
-                              className="p-2 bg-blue-600 text-white rounded-lg disabled:opacity-50"
-                              title="Guardar"
-                            >
-                              <Save size={18} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleDeleteService(service)}
-                              disabled={savingId === service.id}
-                              className="p-2 bg-red-50 text-red-700 rounded-lg disabled:opacity-50"
-                              title="Eliminar"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
+                            <Pencil size={17} /> Editar
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1318,6 +1274,145 @@ function AdminDashboard() {
             </div>
           )}
         </>
+      )}
+
+      {editingService && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-service-title"
+            className="w-full max-w-xl rounded-xl bg-white p-6 shadow-xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="edit-service-title" className="text-xl font-bold text-gray-900">
+                  Editar servicio
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Actualiza sus datos o desactívalo para ocultarlo a nuevos clientes.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingService(null);
+                  setError('');
+                }}
+                disabled={savingId === editingService.id}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                aria-label="Cerrar edición"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="space-y-1 text-sm font-medium text-gray-700 sm:col-span-2">
+                <span>Nombre</span>
+                <input
+                  required
+                  value={editingService.draft.name}
+                  onChange={(event) => setEditingService((current) => current ? {
+                    ...current,
+                    draft: { ...current.draft, name: event.target.value },
+                  } : current)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-gray-700">
+                <span>Categoría</span>
+                <select
+                  required
+                  value={editingService.draft.categoryId}
+                  onChange={(event) => setEditingService((current) => current ? {
+                    ...current,
+                    draft: { ...current.draft, categoryId: event.target.value },
+                  } : current)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                >
+                  <option value="">Selecciona categoría</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>{category.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1 text-sm font-medium text-gray-700">
+                <span>Precio (MXN)</span>
+                <input
+                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editingService.draft.price}
+                  onChange={(event) => setEditingService((current) => current ? {
+                    ...current,
+                    draft: { ...current.draft, price: event.target.value },
+                  } : current)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-gray-700 sm:col-span-2">
+                <span>Descripción</span>
+                <textarea
+                  value={editingService.draft.description}
+                  onChange={(event) => setEditingService((current) => current ? {
+                    ...current,
+                    draft: { ...current.draft, description: event.target.value },
+                  } : current)}
+                  rows={3}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-gray-700 sm:col-span-2">
+                <span>Disponibilidad</span>
+                <select
+                  value={editingService.draft.isActive ? 'active' : 'inactive'}
+                  onChange={(event) => setEditingService((current) => current ? {
+                    ...current,
+                    draft: { ...current.draft, isActive: event.target.value === 'active' },
+                  } : current)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                >
+                  <option value="active">Activo</option>
+                  <option value="inactive">Inactivo</option>
+                </select>
+                <p className="text-xs font-normal text-gray-500">
+                  Los servicios inactivos conservan su historial y no están disponibles para nuevas compras.
+                </p>
+              </label>
+            </div>
+
+            {error && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingService(null);
+                  setError('');
+                }}
+                disabled={savingId === editingService.id}
+                className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveService()}
+                disabled={savingId === editingService.id}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingId === editingService.id ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                {savingId === editingService.id ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {pendingCancellationOrder && (

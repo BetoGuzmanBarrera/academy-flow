@@ -47,6 +47,9 @@ jobs:
       - name: Test admin order cancellation confirmation
         run: node --test tests/admin-order-cancellation.test.mjs
 
+      - name: Test admin catalog management
+        run: node --test tests/admin-catalog-management.test.mjs
+
       - name: Test checkout session Edge Function
         run: node --test supabase/functions/create-checkout-session/index.test.mjs
 
