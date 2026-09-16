@@ -6,6 +6,7 @@ import {
   CircleDollarSign,
   Eye,
   EyeOff,
+  History,
   KeyRound,
   Loader2,
   MessageSquare,
@@ -22,6 +23,7 @@ import type { QueryData } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { AdminMfaGate } from '../components/AdminMfaGate';
+import { AdminActivityHistory } from '../components/AdminActivityHistory';
 import { ServiceDetails } from '../components/ServiceDetails';
 import {
   getOrderProcessingBlockReason,
@@ -88,7 +90,7 @@ const getAdminOrdersQuery = () =>
 
 type AdminOrder = QueryData<ReturnType<typeof getAdminOrdersQuery>>[number];
 
-type AdminTab = 'dashboard' | 'services' | 'orders' | 'support' | 'credentials';
+type AdminTab = 'dashboard' | 'services' | 'orders' | 'support' | 'credentials' | 'activity';
 
 type RevealedCredential = {
   credentialId: string;
@@ -758,6 +760,7 @@ function AdminDashboard() {
     { id: 'orders', label: 'Órdenes', icon: PackageCheck },
     { id: 'support', label: 'Soporte', icon: MessageSquare },
     { id: 'credentials', label: 'Credenciales', icon: KeyRound },
+    { id: 'activity', label: 'Actividad', icon: History },
   ];
 
   return (
@@ -1435,6 +1438,8 @@ function AdminDashboard() {
               </section>
             </div>
           )}
+
+          {tab === 'activity' && <AdminActivityHistory />}
 
           {tab === 'support' && (
             <div className="space-y-4">
