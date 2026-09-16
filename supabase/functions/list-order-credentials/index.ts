@@ -8,6 +8,7 @@ interface CredentialMetadata {
   serviceId: string;
   serviceName: string;
   createdAt: string;
+  updatedAt: string;
   expiresAt: string | null;
   deletedAt: string | null;
   hasEncryptedPayload: boolean;
@@ -18,6 +19,7 @@ interface CredentialRow {
   order_id: string;
   service_id: string;
   created_at: string;
+  updated_at: string;
   expires_at: string | null;
   deleted_at: string | null;
   encrypted_payload: string | null;
@@ -74,7 +76,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: credentials, error: credError } = await adminClient
     .from('order_credentials')
-    .select('id, order_id, service_id, created_at, expires_at, deleted_at, encrypted_payload')
+    .select('id, order_id, service_id, created_at, updated_at, expires_at, deleted_at, encrypted_payload')
     .order('created_at', { ascending: false });
 
   if (credError) {
@@ -98,6 +100,7 @@ Deno.serve(async (req: Request) => {
     serviceId: c.service_id,
     serviceName: serviceNameMap[c.service_id] ?? c.service_id,
     createdAt: c.created_at,
+    updatedAt: c.updated_at,
     expiresAt: c.expires_at,
     deletedAt: c.deleted_at,
     hasEncryptedPayload: c.encrypted_payload !== null,

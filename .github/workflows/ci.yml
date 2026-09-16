@@ -50,6 +50,9 @@ jobs:
       - name: Test admin catalog management
         run: node --test tests/admin-catalog-management.test.mjs
 
+      - name: Test admin credential audit workflow
+        run: node --test tests/admin-credential-audit.test.mjs
+
       - name: Test checkout session Edge Function
         run: node --test supabase/functions/create-checkout-session/index.test.mjs
 
