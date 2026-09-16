@@ -56,6 +56,9 @@ jobs:
       - name: Test admin activity and order history views
         run: node --test tests/admin-activity-history.test.mjs
 
+      - name: Test admin referral metrics
+        run: node --test tests/admin-referral-metrics.test.mjs
+
       - name: Test checkout session Edge Function
         run: node --test supabase/functions/create-checkout-session/index.test.mjs
 

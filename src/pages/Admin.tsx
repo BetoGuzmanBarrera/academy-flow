@@ -6,6 +6,7 @@ import {
   CircleDollarSign,
   Eye,
   EyeOff,
+  Gift,
   History,
   KeyRound,
   Loader2,
@@ -24,6 +25,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { AdminMfaGate } from '../components/AdminMfaGate';
 import { AdminActivityHistory } from '../components/AdminActivityHistory';
+import { AdminReferralMetrics } from '../components/AdminReferralMetrics';
 import { ServiceDetails } from '../components/ServiceDetails';
 import {
   getOrderProcessingBlockReason,
@@ -90,7 +92,7 @@ const getAdminOrdersQuery = () =>
 
 type AdminOrder = QueryData<ReturnType<typeof getAdminOrdersQuery>>[number];
 
-type AdminTab = 'dashboard' | 'services' | 'orders' | 'support' | 'credentials' | 'activity';
+type AdminTab = 'dashboard' | 'services' | 'orders' | 'support' | 'credentials' | 'activity' | 'referrals';
 
 type RevealedCredential = {
   credentialId: string;
@@ -761,6 +763,7 @@ function AdminDashboard() {
     { id: 'support', label: 'Soporte', icon: MessageSquare },
     { id: 'credentials', label: 'Credenciales', icon: KeyRound },
     { id: 'activity', label: 'Actividad', icon: History },
+    { id: 'referrals', label: 'Referidos', icon: Gift },
   ];
 
   return (
@@ -1440,6 +1443,8 @@ function AdminDashboard() {
           )}
 
           {tab === 'activity' && <AdminActivityHistory />}
+
+          {tab === 'referrals' && <AdminReferralMetrics />}
 
           {tab === 'support' && (
             <div className="space-y-4">
