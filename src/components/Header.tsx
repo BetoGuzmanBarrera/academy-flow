@@ -139,6 +139,7 @@ export function Header({
               </button>
               {accountMenuOpen && (
                 <div role="menu" className="absolute right-0 top-full mt-2 w-56 rounded-af-md border border-academy-border bg-academy-surface p-2 shadow-af-elevated">
+                  <button type="button" role="menuitem" onClick={() => navigate('account')} className="flex min-h-touch w-full items-center gap-2 rounded-af-sm px-3 text-left text-af-body-sm hover:bg-academy-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"><UserCircle className="h-4 w-4" aria-hidden="true" />Mi cuenta</button>
                   <button type="button" role="menuitem" onClick={() => navigate('referrals')} className="flex min-h-touch w-full items-center gap-2 rounded-af-sm px-3 text-left text-af-body-sm hover:bg-academy-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"><Gift className="h-4 w-4" aria-hidden="true" />Referidos</button>
                   {isAdmin && <button type="button" role="menuitem" onClick={() => navigate('admin')} className="flex min-h-touch w-full items-center gap-2 rounded-af-sm px-3 text-left text-af-body-sm hover:bg-academy-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"><ShieldCheck className="h-4 w-4" aria-hidden="true" />Administración</button>}
                   <button type="button" role="menuitem" onClick={() => { onOpenChangePassword(); setAccountMenuOpen(false); }} className="flex min-h-touch w-full items-center gap-2 rounded-af-sm px-3 text-left text-af-body-sm hover:bg-academy-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"><KeyRound className="h-4 w-4" aria-hidden="true" />Cambiar contraseña</button>
@@ -183,6 +184,7 @@ export function Header({
 
           <div className="mt-3 space-y-1 border-t border-academy-border pt-3">
             {user && <button type="button" onClick={() => navigate('orders')} className={`${navigationClass} w-full gap-2 text-academy-text hover:bg-academy-subtle`}><ClipboardList className="h-4 w-4" aria-hidden="true" />Mis órdenes</button>}
+            {user && <button type="button" onClick={() => navigate('account')} className={`${navigationClass} w-full gap-2 text-academy-text hover:bg-academy-subtle`}><UserCircle className="h-4 w-4" aria-hidden="true" />Mi cuenta</button>}
             {user && <button type="button" onClick={() => navigate('referrals')} className={`${navigationClass} w-full gap-2 text-academy-text hover:bg-academy-subtle`}><Gift className="h-4 w-4" aria-hidden="true" />Referidos</button>}
             {isAdmin && <button type="button" onClick={() => navigate('admin')} className={`${navigationClass} w-full gap-2 text-academy-text hover:bg-academy-subtle`}><ShieldCheck className="h-4 w-4" aria-hidden="true" />Administración</button>}
             {user ? (
