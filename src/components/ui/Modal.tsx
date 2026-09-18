@@ -45,12 +45,12 @@ export function Modal({
         aria-label={title ? undefined : ariaLabel}
         tabIndex={-1}
         className={classNames(
-          'max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-af-lg bg-academy-surface shadow-af-elevated',
+          'flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-af-lg bg-academy-surface shadow-af-elevated',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary',
           className,
         )}
       >
-        <div className="flex items-center justify-between gap-4 border-b border-academy-border p-af-6">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-academy-border p-af-6">
           {title ? <h2 id={titleId} className="text-af-h3 text-academy-text">{title}</h2> : <span />}
           {dismissible && (
             <button
@@ -63,8 +63,8 @@ export function Modal({
             </button>
           )}
         </div>
-        <div className="p-af-6">{children}</div>
-        {footer && <div className="flex flex-wrap justify-end gap-3 border-t border-academy-border p-af-6">{footer}</div>}
+        <div className="min-h-0 overflow-y-auto p-af-6">{children}</div>
+        {footer && <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-academy-border p-af-6">{footer}</div>}
       </div>
     </div>
   );
