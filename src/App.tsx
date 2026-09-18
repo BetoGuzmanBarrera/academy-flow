@@ -8,6 +8,7 @@ import { AuthModal } from './components/AuthModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { SupportChat } from './components/SupportChat';
 import { Home } from './pages/Home';
+import { Catalog } from './pages/Catalog';
 import { About } from './pages/About';
 import { Vision } from './pages/Vision';
 import { Mission } from './pages/Mission';
@@ -18,7 +19,7 @@ import { Policies } from './pages/Policies';
 import { ResetPassword } from './pages/ResetPassword';
 import { Admin } from './pages/Admin';
 
-export type Page = 'home' | 'about' | 'vision' | 'mission' | 'orders' | 'checkout' | 'referrals' | 'policies' | 'admin';
+export type Page = 'home' | 'catalog' | 'about' | 'vision' | 'mission' | 'orders' | 'checkout' | 'referrals' | 'policies' | 'admin';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -57,6 +58,24 @@ function App() {
     setCurrentPage('home');
   };
 
+  const handleNavigate = (page: Page) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  };
+
+  const handleNavigateToHomeSection = (sectionId: string) => {
+    setCurrentPage('home');
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        document.getElementById(sectionId)?.scrollIntoView({
+          behavior: reduceMotion ? 'auto' : 'smooth',
+          block: 'start',
+        });
+      });
+    });
+  };
+
   if (isResetPassword) {
     return (
       <AuthProvider>
@@ -68,7 +87,9 @@ function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'home':
-        return <Home onOpenAuth={() => setIsAuthModalOpen(true)} />;
+        return <Home onOpenAuth={() => setIsAuthModalOpen(true)} onNavigate={handleNavigate} />;
+      case 'catalog':
+        return <Catalog onOpenAuth={() => setIsAuthModalOpen(true)} />;
       case 'about':
         return <About />;
       case 'vision':
@@ -91,27 +112,31 @@ function App() {
       case 'admin':
         return <Admin />;
       default:
-        return <Home onOpenAuth={() => setIsAuthModalOpen(true)} />;
+        return <Home onOpenAuth={() => setIsAuthModalOpen(true)} onNavigate={handleNavigate} />;
     }
   };
 
   return (
     <AuthProvider>
       <CartProvider>
-        <div className="min-h-screen bg-gray-50 flex flex-col">
+        <div className="flex min-h-screen flex-col bg-academy-background">
           <Header
-            onNavigate={setCurrentPage}
+            onNavigate={handleNavigate}
             currentPage={currentPage}
             onOpenCart={() => setIsCartOpen(true)}
             onOpenAuth={() => setIsAuthModalOpen(true)}
             onOpenChangePassword={() => setIsChangePasswordOpen(true)}
+            onNavigateToHomeSection={handleNavigateToHomeSection}
           />
 
           <main className="flex-1">
             {renderPage()}
           </main>
 
-          <Footer />
+          <Footer
+            onNavigate={handleNavigate}
+            onNavigateToHomeSection={handleNavigateToHomeSection}
+          />
 
           <Cart
             isOpen={isCartOpen}

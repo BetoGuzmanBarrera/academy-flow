@@ -1,4 +1,16 @@
-import { ShoppingCart, User, LogOut, Menu, X, ShieldCheck, KeyRound } from 'lucide-react';
+import {
+  BookOpen,
+  ChevronDown,
+  ClipboardList,
+  Gift,
+  KeyRound,
+  LogOut,
+  Menu,
+  ShieldCheck,
+  ShoppingCart,
+  UserCircle,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -6,221 +18,183 @@ import type { Page } from '../App';
 
 interface HeaderProps {
   onNavigate: (page: Page) => void;
+  onNavigateToHomeSection: (sectionId: string) => void;
   currentPage: Page;
   onOpenCart: () => void;
   onOpenAuth: () => void;
   onOpenChangePassword: () => void;
 }
 
-export function Header({ onNavigate, currentPage, onOpenCart, onOpenAuth, onOpenChangePassword }: HeaderProps) {
+const navigationClass = 'flex min-h-touch items-center rounded-af-md px-3 text-af-label transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary';
+
+export function Header({
+  currentPage,
+  onNavigate,
+  onNavigateToHomeSection,
+  onOpenAuth,
+  onOpenCart,
+  onOpenChangePassword,
+}: HeaderProps) {
   const { user, isAdmin, signOut } = useAuth();
   const { totalItems } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [aboutMenuOpen, setAboutMenuOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
-  const navItems: { id: Page; label: string }[] = [
-    { id: 'home', label: 'Inicio' },
-    { id: 'about', label: 'Quiénes Somos' },
-    { id: 'vision', label: 'Visión' },
-    { id: 'mission', label: 'Misión' },
-    { id: 'referrals', label: 'Referidos' },
-    { id: 'policies', label: 'Políticas' },
-  ];
+  const navigate = (page: Page) => {
+    onNavigate(page);
+    setMobileMenuOpen(false);
+    setAboutMenuOpen(false);
+    setAccountMenuOpen(false);
+  };
+
+  const navigateToSection = (sectionId: string) => {
+    onNavigateToHomeSection(sectionId);
+    setMobileMenuOpen(false);
+    setAboutMenuOpen(false);
+    setAccountMenuOpen(false);
+  };
 
   return (
-    <header className="bg-white shadow-md sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          <div className="flex items-center">
-            <button
-              onClick={() => onNavigate('home')}
-              className="text-2xl font-bold text-blue-600 hover:text-blue-700 transition"
-            >
-              Academy Flow
-            </button>
-          </div>
+    <header className="sticky top-0 z-40 border-b border-academy-border bg-academy-surface/95 shadow-sm backdrop-blur">
+      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <button
+          type="button"
+          onClick={() => navigate('home')}
+          className="flex min-h-touch items-center gap-2 rounded-af-md text-lg font-bold text-academy-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"
+          aria-label="Ir al inicio de Academy Flow"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-af-md bg-academy-primary text-white"><BookOpen className="h-5 w-5" aria-hidden="true" /></span>
+          <span>Academy Flow</span>
+        </button>
 
-          <nav className="hidden md:flex space-x-8">
-            {navItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => onNavigate(item.id)}
-                className={`${
-                  currentPage === item.id
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-700 hover:text-blue-600'
-                } px-3 py-2 text-sm font-medium transition`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-
-          <div className="hidden md:flex items-center space-x-4">
-            {user && (
-              <button
-                onClick={() => onNavigate('orders')}
-                className="text-gray-700 hover:text-blue-600 transition flex items-center space-x-2"
-              >
-                <User size={20} />
-                <span className="text-sm">Mis Órdenes</span>
-              </button>
-            )}
-
-            {isAdmin && (
-              <button
-                onClick={() => onNavigate('admin')}
-                className="text-gray-700 hover:text-blue-600 transition flex items-center space-x-2"
-              >
-                <ShieldCheck size={20} />
-                <span className="text-sm">Administración</span>
-              </button>
-            )}
-
-            {user ? (
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={onOpenChangePassword}
-                  className="text-gray-700 hover:text-blue-600 transition flex items-center space-x-2"
-                >
-                  <KeyRound size={20} />
-                  <span className="text-sm">Cambiar Contraseña</span>
-                </button>
-                <button
-                  onClick={signOut}
-                  className="flex items-center space-x-2 text-gray-700 hover:text-red-600 transition"
-                >
-                  <LogOut size={20} />
-                  <span className="text-sm">Salir</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={onOpenAuth}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-              >
-                Ingresar
-              </button>
-            )}
-
-            <button
-              onClick={onOpenCart}
-              className="relative p-2 text-gray-700 hover:text-blue-600 transition"
-            >
-              <ShoppingCart size={24} />
-              {totalItems > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {totalItems}
-                </span>
-              )}
-            </button>
-          </div>
-
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 text-gray-700"
+        <nav aria-label="Navegación principal" className="hidden items-center gap-1 xl:flex">
+          <button type="button" onClick={() => navigate('catalog')} className={`${navigationClass} ${currentPage === 'catalog' ? 'bg-blue-50 text-academy-primary' : 'text-academy-text hover:bg-academy-subtle'}`}>
+            Servicios
+          </button>
+          <button type="button" onClick={() => navigateToSection('how-it-works')} className={`${navigationClass} text-academy-text hover:bg-academy-subtle`}>
+            Cómo funciona
+          </button>
+          <div
+            className="relative"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setAboutMenuOpen(false);
+            }}
           >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={aboutMenuOpen}
+              onClick={() => {
+                setAboutMenuOpen((open) => !open);
+                setAccountMenuOpen(false);
+              }}
+              className={`${navigationClass} gap-1 text-academy-text hover:bg-academy-subtle`}
+            >
+              Nosotros <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </button>
+            {aboutMenuOpen && (
+              <div role="menu" className="absolute left-0 top-full mt-2 w-48 rounded-af-md border border-academy-border bg-academy-surface p-2 shadow-af-elevated">
+                {([['about', 'Quiénes Somos'], ['mission', 'Misión'], ['vision', 'Visión']] as const).map(([page, label]) => (
+                  <button key={page} type="button" role="menuitem" onClick={() => navigate(page)} className="min-h-touch w-full rounded-af-sm px-3 text-left text-af-body-sm text-academy-text hover:bg-academy-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary">
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button type="button" onClick={() => navigateToSection('help')} className={`${navigationClass} text-academy-text hover:bg-academy-subtle`}>
+            Ayuda
+          </button>
+        </nav>
+
+        <div className="hidden items-center gap-2 xl:flex">
+          {user && (
+            <button type="button" onClick={() => navigate('orders')} className={`${navigationClass} gap-2 text-academy-text hover:bg-academy-subtle`}>
+              <ClipboardList className="h-4 w-4" aria-hidden="true" />
+              Mis órdenes
+            </button>
+          )}
+
+          {user ? (
+            <div
+              className="relative"
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setAccountMenuOpen(false);
+              }}
+            >
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={accountMenuOpen}
+                onClick={() => {
+                  setAccountMenuOpen((open) => !open);
+                  setAboutMenuOpen(false);
+                }}
+                className={`${navigationClass} gap-2 text-academy-text hover:bg-academy-subtle`}
+              >
+                <UserCircle className="h-5 w-5" aria-hidden="true" />
+                Cuenta
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </button>
+              {accountMenuOpen && (
+                <div role="menu" className="absolute right-0 top-full mt-2 w-56 rounded-af-md border border-academy-border bg-academy-surface p-2 shadow-af-elevated">
+                  <button type="button" role="menuitem" onClick={() => navigate('referrals')} className="flex min-h-touch w-full items-center gap-2 rounded-af-sm px-3 text-left text-af-body-sm hover:bg-academy-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"><Gift className="h-4 w-4" aria-hidden="true" />Referidos</button>
+                  {isAdmin && <button type="button" role="menuitem" onClick={() => navigate('admin')} className="flex min-h-touch w-full items-center gap-2 rounded-af-sm px-3 text-left text-af-body-sm hover:bg-academy-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"><ShieldCheck className="h-4 w-4" aria-hidden="true" />Administración</button>}
+                  <button type="button" role="menuitem" onClick={() => { onOpenChangePassword(); setAccountMenuOpen(false); }} className="flex min-h-touch w-full items-center gap-2 rounded-af-sm px-3 text-left text-af-body-sm hover:bg-academy-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"><KeyRound className="h-4 w-4" aria-hidden="true" />Cambiar contraseña</button>
+                  <button type="button" role="menuitem" onClick={() => { void signOut(); setAccountMenuOpen(false); }} className="flex min-h-touch w-full items-center gap-2 rounded-af-sm px-3 text-left text-af-body-sm text-academy-danger hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-danger"><LogOut className="h-4 w-4" aria-hidden="true" />Cerrar sesión</button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button type="button" onClick={onOpenAuth} className={`${navigationClass} bg-academy-primary text-white hover:bg-academy-primary-strong`}>
+              Ingresar
+            </button>
+          )}
+
+          <button type="button" onClick={onOpenCart} aria-label={`Abrir carrito${totalItems > 0 ? `, ${totalItems} artículos` : ''}`} className="relative flex min-h-touch min-w-touch items-center justify-center rounded-af-md text-academy-text hover:bg-academy-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary">
+            <ShoppingCart className="h-5 w-5" aria-hidden="true" />
+            {totalItems > 0 && <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-academy-danger px-1 text-xs font-semibold text-white">{totalItems}</span>}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1 xl:hidden">
+          <button type="button" onClick={onOpenCart} aria-label={`Abrir carrito${totalItems > 0 ? `, ${totalItems} artículos` : ''}`} className="relative flex min-h-touch min-w-touch items-center justify-center rounded-af-md text-academy-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary">
+            <ShoppingCart className="h-5 w-5" aria-hidden="true" />
+            {totalItems > 0 && <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-academy-danger px-1 text-xs font-semibold text-white">{totalItems}</span>}
+          </button>
+          <button type="button" onClick={() => setMobileMenuOpen((open) => !open)} aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={mobileMenuOpen} className="flex min-h-touch min-w-touch items-center justify-center rounded-af-md text-academy-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary">
+            {mobileMenuOpen ? <X className="h-6 w-6" aria-hidden="true" /> : <Menu className="h-6 w-6" aria-hidden="true" />}
           </button>
         </div>
       </div>
 
       {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-t">
-          <nav className="px-4 py-4 space-y-2">
-            {navItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  onNavigate(item.id);
-                  setMobileMenuOpen(false);
-                }}
-                className={`${
-                  currentPage === item.id ? 'text-blue-600 font-semibold' : 'text-gray-700'
-                } block w-full text-left px-3 py-2 text-sm hover:bg-gray-50 rounded transition`}
-              >
-                {item.label}
-              </button>
+        <nav aria-label="Navegación móvil" className="border-t border-academy-border bg-academy-surface px-4 py-4 xl:hidden">
+          <div className="space-y-1">
+            <button type="button" onClick={() => navigate('catalog')} className={`${navigationClass} w-full text-academy-text hover:bg-academy-subtle`}>Servicios</button>
+            <button type="button" onClick={() => navigateToSection('how-it-works')} className={`${navigationClass} w-full text-academy-text hover:bg-academy-subtle`}>Cómo funciona</button>
+            <p className="px-3 pt-3 text-af-label-sm uppercase tracking-wider text-academy-text-muted">Nosotros</p>
+            {([['about', 'Quiénes Somos'], ['mission', 'Misión'], ['vision', 'Visión']] as const).map(([page, label]) => (
+              <button key={page} type="button" onClick={() => navigate(page)} className={`${navigationClass} w-full pl-6 text-academy-text hover:bg-academy-subtle`}>{label}</button>
             ))}
+            <button type="button" onClick={() => navigateToSection('help')} className={`${navigationClass} w-full text-academy-text hover:bg-academy-subtle`}>Ayuda</button>
+          </div>
 
-            {user && (
-              <button
-                onClick={() => {
-                  onNavigate('orders');
-                  setMobileMenuOpen(false);
-                }}
-                className="flex items-center space-x-2 w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded"
-              >
-                <User size={18} />
-                <span>Mis Órdenes</span>
-              </button>
+          <div className="mt-3 space-y-1 border-t border-academy-border pt-3">
+            {user && <button type="button" onClick={() => navigate('orders')} className={`${navigationClass} w-full gap-2 text-academy-text hover:bg-academy-subtle`}><ClipboardList className="h-4 w-4" aria-hidden="true" />Mis órdenes</button>}
+            {user && <button type="button" onClick={() => navigate('referrals')} className={`${navigationClass} w-full gap-2 text-academy-text hover:bg-academy-subtle`}><Gift className="h-4 w-4" aria-hidden="true" />Referidos</button>}
+            {isAdmin && <button type="button" onClick={() => navigate('admin')} className={`${navigationClass} w-full gap-2 text-academy-text hover:bg-academy-subtle`}><ShieldCheck className="h-4 w-4" aria-hidden="true" />Administración</button>}
+            {user ? (
+              <>
+                <button type="button" onClick={() => { onOpenChangePassword(); setMobileMenuOpen(false); }} className={`${navigationClass} w-full gap-2 text-academy-text hover:bg-academy-subtle`}><KeyRound className="h-4 w-4" aria-hidden="true" />Cambiar contraseña</button>
+                <button type="button" onClick={() => { void signOut(); setMobileMenuOpen(false); }} className={`${navigationClass} w-full gap-2 text-academy-danger hover:bg-red-50`}><LogOut className="h-4 w-4" aria-hidden="true" />Cerrar sesión</button>
+              </>
+            ) : (
+              <button type="button" onClick={() => { onOpenAuth(); setMobileMenuOpen(false); }} className={`${navigationClass} w-full justify-center bg-academy-primary text-white hover:bg-academy-primary-strong`}>Ingresar</button>
             )}
-
-            {isAdmin && (
-              <button
-                onClick={() => {
-                  onNavigate('admin');
-                  setMobileMenuOpen(false);
-                }}
-                className="flex items-center space-x-2 w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded"
-              >
-                <ShieldCheck size={18} />
-                <span>Administración</span>
-              </button>
-            )}
-
-            <div className="border-t pt-2 space-y-2">
-              <button
-                onClick={() => {
-                  onOpenCart();
-                  setMobileMenuOpen(false);
-                }}
-                className="flex items-center justify-between w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded"
-              >
-                <span className="flex items-center space-x-2">
-                  <ShoppingCart size={18} />
-                  <span>Carrito</span>
-                </span>
-                {totalItems > 0 && (
-                  <span className="bg-red-500 text-white text-xs rounded-full px-2 py-1">
-                    {totalItems}
-                  </span>
-                )}
-              </button>
-
-              {user ? (
-                <>
-                  <button
-                    onClick={() => {
-                      onOpenChangePassword();
-                      setMobileMenuOpen(false);
-                    }}
-                    className="flex items-center space-x-2 w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded"
-                  >
-                    <KeyRound size={18} />
-                    <span>Cambiar Contraseña</span>
-                  </button>
-                  <button
-                    onClick={signOut}
-                    className="flex items-center space-x-2 w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-gray-50 rounded"
-                  >
-                    <LogOut size={18} />
-                    <span>Salir</span>
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => {
-                    onOpenAuth();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-                >
-                  Ingresar
-                </button>
-              )}
-            </div>
-          </nav>
-        </div>
+          </div>
+        </nav>
       )}
     </header>
   );
