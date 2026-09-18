@@ -74,20 +74,29 @@ export function Home({ onNavigate, onOpenAuth }: HomeProps) {
 
     const loadData = async () => {
       setLoading(true);
-      const [categoriesResult, servicesResult] = await Promise.all([
-        supabase.from('categories').select('*').order('name'),
-        supabase.from('services').select('*').eq('is_active', true).order('name'),
-      ]);
+      try {
+        const [categoriesResult, servicesResult] = await Promise.all([
+          supabase.from('categories').select('*').order('name'),
+          supabase.from('services').select('*').eq('is_active', true).order('name'),
+        ]);
 
-      if (!active) return;
-      if (categoriesResult.error || servicesResult.error) {
-        setLoadError('No pudimos cargar los servicios en este momento. Intenta de nuevo más tarde.');
-      } else {
-        setCategories(categoriesResult.data ?? []);
-        setServices(servicesResult.data ?? []);
-        setLoadError(null);
+        if (!active) return;
+        if (categoriesResult.error || servicesResult.error) {
+          setLoadError('No pudimos cargar los servicios en este momento. Intenta de nuevo más tarde.');
+        } else {
+          setCategories(categoriesResult.data ?? []);
+          setServices(servicesResult.data ?? []);
+          setLoadError(null);
+        }
+      } catch {
+        if (active) {
+          setLoadError('No pudimos cargar los servicios en este momento. Intenta de nuevo más tarde.');
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-      setLoading(false);
     };
 
     void loadData();

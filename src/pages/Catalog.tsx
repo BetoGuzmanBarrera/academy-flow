@@ -34,19 +34,28 @@ export function Catalog({ onOpenAuth }: CatalogProps) {
     const loadCatalog = async () => {
       setLoading(true);
       setLoadError(null);
-      const [categoriesResult, servicesResult] = await Promise.all([
-        supabase.from('categories').select('*').order('name'),
-        supabase.from('services').select('*').eq('is_active', true).order('name'),
-      ]);
+      try {
+        const [categoriesResult, servicesResult] = await Promise.all([
+          supabase.from('categories').select('*').order('name'),
+          supabase.from('services').select('*').eq('is_active', true).order('name'),
+        ]);
 
-      if (!active) return;
-      if (categoriesResult.error || servicesResult.error) {
-        setLoadError('No pudimos cargar el catálogo. Intenta nuevamente.');
-      } else {
-        setCategories(categoriesResult.data ?? []);
-        setServices(servicesResult.data ?? []);
+        if (!active) return;
+        if (categoriesResult.error || servicesResult.error) {
+          setLoadError('No pudimos cargar el catálogo. Intenta nuevamente.');
+        } else {
+          setCategories(categoriesResult.data ?? []);
+          setServices(servicesResult.data ?? []);
+        }
+      } catch {
+        if (active) {
+          setLoadError('No pudimos cargar el catálogo. Intenta nuevamente.');
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-      setLoading(false);
     };
 
     void loadCatalog();
