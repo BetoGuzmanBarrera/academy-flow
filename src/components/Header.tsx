@@ -9,12 +9,12 @@ import {
   ShieldCheck,
   ShoppingCart,
   UserCircle,
-  X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import type { Page } from '../App';
+import { Drawer } from './ui';
 
 interface HeaderProps {
   onNavigate: (page: Page) => void;
@@ -56,8 +56,9 @@ export function Header({
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-academy-border bg-academy-surface/95 shadow-sm backdrop-blur">
-      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+    <>
+      <header className="sticky top-0 z-40 border-b border-academy-border bg-academy-surface shadow-sm">
+        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <button
           type="button"
           onClick={() => navigate('home')}
@@ -164,14 +165,31 @@ export function Header({
             <ShoppingCart className="h-5 w-5" aria-hidden="true" />
             {totalItems > 0 && <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-academy-danger px-1 text-xs font-semibold text-white">{totalItems}</span>}
           </button>
-          <button type="button" onClick={() => setMobileMenuOpen((open) => !open)} aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={mobileMenuOpen} className="flex min-h-touch min-w-touch items-center justify-center rounded-af-md text-academy-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary">
-            {mobileMenuOpen ? <X className="h-6 w-6" aria-hidden="true" /> : <Menu className="h-6 w-6" aria-hidden="true" />}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="Abrir menú"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-navigation"
+            aria-haspopup="dialog"
+            className="flex min-h-touch min-w-touch items-center justify-center rounded-af-md text-academy-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"
+          >
+            <Menu className="h-6 w-6" aria-hidden="true" />
           </button>
         </div>
       </div>
+      </header>
 
-      {mobileMenuOpen && (
-        <nav aria-label="Navegación móvil" className="border-t border-academy-border bg-academy-surface px-4 py-4 xl:hidden">
+      <div className="xl:hidden">
+        <Drawer
+          open={mobileMenuOpen}
+          onClose={() => setMobileMenuOpen(false)}
+          title="Menú"
+          ariaLabel="Navegación móvil"
+          side="right"
+          className="max-w-sm"
+        >
+          <nav id="mobile-navigation" aria-label="Navegación móvil">
           <div className="space-y-1">
             <button type="button" onClick={() => navigate('catalog')} className={`${navigationClass} w-full text-academy-text hover:bg-academy-subtle`}>Servicios</button>
             <button type="button" onClick={() => navigateToSection('how-it-works')} className={`${navigationClass} w-full text-academy-text hover:bg-academy-subtle`}>Cómo funciona</button>
@@ -196,8 +214,9 @@ export function Header({
               <button type="button" onClick={() => { onOpenAuth(); setMobileMenuOpen(false); }} className={`${navigationClass} w-full justify-center bg-academy-primary text-white hover:bg-academy-primary-strong`}>Ingresar</button>
             )}
           </div>
-        </nav>
-      )}
-    </header>
+          </nav>
+        </Drawer>
+      </div>
+    </>
   );
 }

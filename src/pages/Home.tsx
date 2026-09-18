@@ -357,7 +357,7 @@ export function Home({ onNavigate, onOpenAuth }: HomeProps) {
             <div className="rounded-af-lg bg-academy-primary px-6 py-10 text-center text-white shadow-af-elevated sm:px-10">
               <h2 className="text-af-h2">Encuentra el apoyo adecuado para tu solicitud</h2>
               <p className="mx-auto mt-3 max-w-2xl text-blue-100">Consulta los servicios activos, revisa sus precios y personaliza tu pedido.</p>
-              <Button className="mt-7 bg-white text-academy-primary hover:bg-blue-50" size="lg" onClick={() => onNavigate('catalog')}>Explorar servicios</Button>
+              <Button variant="secondary" className="mt-7 border-white bg-white hover:bg-blue-50" size="lg" onClick={() => onNavigate('catalog')}>Explorar servicios</Button>
             </div>
           </div>
         </section>
