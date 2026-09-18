@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { X, Lock, Eye, EyeOff, Check, Circle, AlertCircle, Mail } from 'lucide-react';
+import { Check, Circle, Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { allRequirementsMet, REQUIREMENT_LABELS, usePasswordChecks } from '../lib/passwordValidation';
 import { supabase } from '../lib/supabase';
-import { usePasswordChecks, REQUIREMENT_LABELS, allRequirementsMet } from '../lib/passwordValidation';
+import { Alert, Button, Input, Modal } from './ui';
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -32,8 +33,6 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
     !loading &&
     (!needsReauth || nonce.length > 0);
 
-  if (!isOpen) return null;
-
   const clearSensitiveFields = () => {
     setCurrentPassword('');
     setNewPassword('');
@@ -54,20 +53,19 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
     onClose();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (loading) return;
     setError('');
 
     if (!currentPassword) {
       setError('Debes ingresar tu contraseña actual.');
       return;
     }
-
     if (!requirementsMet) {
       setError('Tu nueva contraseña no cumple todos los requisitos.');
       return;
     }
-
     if (!passwordsMatch) {
       setError('Las contraseñas no coinciden.');
       return;
@@ -80,9 +78,7 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
         password: newPassword,
         current_password: currentPassword,
       };
-      if (needsReauth && nonce) {
-        attributes.nonce = nonce;
-      }
+      if (needsReauth && nonce) attributes.nonce = nonce;
 
       const { error: updateError } = await supabase.auth.updateUser(attributes);
 
@@ -101,12 +97,10 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
             setReauthSent(true);
             setError('');
           }
-          setLoading(false);
           return;
         }
 
         setError('No se pudo actualizar la contraseña. Inténtalo de nuevo.');
-        setLoading(false);
         return;
       }
 
@@ -114,10 +108,7 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
       clearSensitiveFields();
       setNeedsReauth(false);
       setReauthSent(false);
-
-      setTimeout(() => {
-        handleClose();
-      }, 2000);
+      setTimeout(handleClose, 2000);
     } catch {
       setError('Ocurrió un error inesperado. Inténtalo de nuevo.');
     } finally {
@@ -126,196 +117,131 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={handleClose}></div>
-
-      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-        <button
-          onClick={handleClose}
-          className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition"
-          aria-label="Cerrar"
-        >
-          <X size={20} />
-        </button>
-
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Cambiar Contraseña</h2>
-
-        {success ? (
-          <div className="text-center py-8">
-            <div className="bg-green-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <Check className="text-green-600" size={32} />
-            </div>
-            <p className="text-gray-700 font-medium">Contraseña actualizada correctamente</p>
+    <Modal open={isOpen} onClose={handleClose} title="Cambiar contraseña" className="max-w-lg">
+      {success ? (
+        <div className="py-8 text-center" role="status" aria-live="polite">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+            <Check className="h-8 w-8 text-green-700" aria-hidden="true" />
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Contraseña Actual
-              </label>
-              <div className="relative">
-                <Lock
-                  size={20}
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                />
-                <input
-                  type={showCurrent ? 'text' : 'password'}
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="••••••••"
-                  required
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrent((s) => !s)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
-                  aria-label={showCurrent ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                >
-                  {showCurrent ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-            </div>
+          <p className="mt-4 text-af-h4 text-academy-text">Contraseña actualizada correctamente</p>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-5" aria-busy={loading || undefined}>
+          <PasswordInput
+            id="change-current-password"
+            label="Contraseña actual"
+            value={currentPassword}
+            onChange={setCurrentPassword}
+            visible={showCurrent}
+            onToggle={() => setShowCurrent((visible) => !visible)}
+            autoComplete="current-password"
+          />
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Nueva Contraseña
-              </label>
-              <div className="relative">
-                <Lock
-                  size={20}
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                />
-                <input
-                  type={showNew ? 'text' : 'password'}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="••••••••"
-                  required
-                  minLength={10}
-                  autoComplete="new-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNew((s) => !s)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
-                  aria-label={showNew ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                >
-                  {showNew ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-            </div>
+          <PasswordInput
+            id="change-new-password"
+            label="Nueva contraseña"
+            value={newPassword}
+            onChange={setNewPassword}
+            visible={showNew}
+            onToggle={() => setShowNew((visible) => !visible)}
+            autoComplete="new-password"
+            minLength={10}
+          />
 
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5">
-              <p className="text-xs font-medium text-gray-600 mb-1">
-                Tu contraseña debe contener:
-              </p>
+          <div className="space-y-2 rounded-af-md border border-academy-border bg-academy-subtle p-4">
+            <p className="text-af-label text-academy-text">Tu contraseña debe contener:</p>
+            <ul className="grid gap-2 sm:grid-cols-2" aria-label="Requisitos de contraseña">
               {REQUIREMENT_LABELS.map(({ key, label }) => {
                 const met = passwordChecks[key];
                 return (
-                  <div
-                    key={key}
-                    className="flex items-center gap-2 text-xs transition-colors duration-200"
-                  >
-                    {met ? (
-                      <Check size={14} className="text-green-600 flex-shrink-0" />
-                    ) : (
-                      <Circle size={14} className="text-gray-300 flex-shrink-0" />
-                    )}
-                    <span className={met ? 'text-green-600' : 'text-gray-400'}>
-                      {label}
+                  <li key={key} className="flex items-center gap-2 text-af-body-sm">
+                    {met ? <Check className="h-4 w-4 shrink-0 text-green-700" aria-hidden="true" /> : <Circle className="h-4 w-4 shrink-0 text-academy-text-muted" aria-hidden="true" />}
+                    <span className={met ? 'text-green-800' : 'text-academy-text-muted'}>
+                      <span className="sr-only">{met ? 'Cumplido: ' : 'Pendiente: '}</span>{label}
                     </span>
-                  </div>
+                  </li>
                 );
               })}
+            </ul>
+          </div>
+
+          <PasswordInput
+            id="change-confirm-password"
+            label="Confirmar nueva contraseña"
+            value={confirmPassword}
+            onChange={setConfirmPassword}
+            visible={showConfirm}
+            onToggle={() => setShowConfirm((visible) => !visible)}
+            autoComplete="new-password"
+            minLength={10}
+            describedBy={confirmPassword.length > 0 ? 'change-password-match' : undefined}
+            invalid={confirmPassword.length > 0 && !passwordsMatch}
+          />
+
+          {confirmPassword.length > 0 && (
+            <p id="change-password-match" className={`flex items-center gap-2 text-af-body-sm ${passwordsMatch ? 'text-green-800' : 'text-academy-danger'}`}>
+              {passwordsMatch ? <Check className="h-4 w-4" aria-hidden="true" /> : <Circle className="h-4 w-4" aria-hidden="true" />}
+              {passwordsMatch ? 'Las contraseñas coinciden' : 'Las contraseñas no coinciden'}
+            </p>
+          )}
+
+          {needsReauth && reauthSent && (
+            <div className="space-y-4 rounded-af-md border border-blue-200 bg-blue-50 p-4">
+              <div className="flex items-start gap-3 text-blue-950">
+                <Mail className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+                <p className="text-af-body-sm">Enviamos un código de verificación a tu correo.</p>
+              </div>
+              <Input
+                id="change-password-nonce"
+                type="text"
+                label="Código de 6 dígitos"
+                value={nonce}
+                onChange={(event) => setNonce(event.target.value)}
+                placeholder="000000"
+                required
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                className="text-center text-lg tracking-[0.3em]"
+              />
             </div>
+          )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Confirmar Nueva Contraseña
-              </label>
-              <div className="relative">
-                <Lock
-                  size={20}
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                />
-                <input
-                  type={showConfirm ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="••••••••"
-                  required
-                  minLength={10}
-                  autoComplete="new-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirm((s) => !s)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
-                  aria-label={showConfirm ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                >
-                  {showConfirm ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-              {confirmPassword.length > 0 && (
-                <p
-                  className={`text-xs mt-1.5 transition-colors duration-200 ${
-                    passwordsMatch ? 'text-green-600' : 'text-red-500'
-                  }`}
-                >
-                  {passwordsMatch
-                    ? 'Las contraseñas coinciden'
-                    : 'Las contraseñas no coinciden'}
-                </p>
-              )}
-            </div>
+          {error && <Alert variant="error" role="alert">{error}</Alert>}
 
-            {needsReauth && reauthSent && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-                <div className="flex items-start space-x-2">
-                  <Mail size={18} className="text-blue-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-blue-700">
-                    Enviamos un código de verificación a tu correo. Ingrésalo a continuación para continuar.
-                  </p>
-                </div>
-                <input
-                  type="text"
-                  value={nonce}
-                  onChange={(e) => setNonce(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-lg tracking-widest"
-                  placeholder="Código de 6 dígitos"
-                  required
-                  autoComplete="one-time-code"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                />
-              </div>
-            )}
+          <Button type="submit" size="lg" className="w-full" loading={loading} disabled={!canSubmit}>
+            {loading ? 'Procesando…' : needsReauth ? 'Verificar y cambiar' : 'Cambiar contraseña'}
+          </Button>
+        </form>
+      )}
+    </Modal>
+  );
+}
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start space-x-2">
-                <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
-                <span>{error}</span>
-              </div>
-            )}
+interface PasswordInputProps {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  visible: boolean;
+  onToggle: () => void;
+  autoComplete: 'current-password' | 'new-password';
+  minLength?: number;
+  describedBy?: string;
+  invalid?: boolean;
+}
 
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-blue-400"
-            >
-              {loading
-                ? 'Procesando...'
-                : needsReauth
-                ? 'Verificar y Cambiar'
-                : 'Cambiar Contraseña'}
-            </button>
-          </form>
-        )}
+function PasswordInput({ id, label, value, onChange, visible, onToggle, autoComplete, minLength, describedBy, invalid }: PasswordInputProps) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1.5 block text-af-label text-academy-text">{label}</label>
+      <div className="relative">
+        <Lock className="pointer-events-none absolute inset-y-0 left-3 my-auto h-5 w-5 text-academy-text-muted" aria-hidden="true" />
+        <input id={id} type={visible ? 'text' : 'password'} value={value} onChange={(event) => onChange(event.target.value)} className="min-h-touch w-full rounded-af-md border border-academy-border bg-academy-surface py-2 pl-10 pr-12 text-academy-text shadow-sm placeholder:text-academy-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary" placeholder="••••••••" required minLength={minLength} autoComplete={autoComplete} aria-describedby={describedBy} aria-invalid={invalid || undefined} />
+        <button type="button" onClick={onToggle} className="absolute inset-y-0 right-0 flex min-h-touch min-w-touch items-center justify-center rounded-af-md text-academy-text-muted hover:text-academy-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary" aria-label={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
+          {visible ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
+        </button>
       </div>
     </div>
   );
