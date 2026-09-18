@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Lock, Mail, User, Eye, EyeOff, Info } from 'lucide-react';
 import type { Service, Category } from '../lib/database.types';
 export type {
@@ -23,6 +23,7 @@ interface CredentialsFormProps {
 }
 
 export function CredentialsForm({ service, category, onSubmit }: CredentialsFormProps) {
+  const fieldIdPrefix = useId();
   const normalized = normalizePlatformName(category.name);
   const needsSelector = platformNeedsSelector(normalized);
   const isAleks = isAleksPlatform(normalized);
@@ -91,15 +92,15 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
   }, [username, email, password, additionalInfo, accessMethod]);
 
   const inputClass =
-    'w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+    'min-h-touch w-full rounded-af-md border border-academy-border bg-academy-surface py-2 pl-10 pr-12 text-sm text-academy-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary';
   const textInputClass =
-    'w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+    'min-h-touch w-full rounded-af-md border border-academy-border bg-academy-surface px-4 py-2 text-sm text-academy-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary';
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-5">
-      <div className="flex items-start space-x-2 pb-3 border-b border-gray-100">
-        <div className="bg-blue-100 rounded-full p-2 shrink-0">
-          <Lock className="text-blue-600" size={16} />
+    <div className="space-y-5 rounded-af-lg border border-academy-border bg-academy-surface p-5 shadow-af-card">
+      <div className="flex items-start space-x-2 border-b border-academy-border pb-3">
+        <div className="shrink-0 rounded-full bg-blue-100 p-2">
+          <Lock className="text-academy-primary" size={16} aria-hidden="true" />
         </div>
         <div>
           <h4 className="font-semibold text-gray-900 text-sm">{service.name}</h4>
@@ -108,15 +109,13 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
       </div>
 
       {needsSelector && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Método de acceso
-          </label>
+        <fieldset>
+          <legend className="mb-2 block text-af-label text-academy-text">Método de acceso</legend>
           <div className="space-y-2">
             {isAleks && (
               <>
                 <label
-                  className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition ${
+                  className={`flex min-h-touch cursor-pointer items-center gap-3 rounded-af-md border-2 p-3 transition ${
                     accessMethod === 'aleks'
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
@@ -134,7 +133,7 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
                   <span className="text-sm font-medium text-gray-900">Cuenta ALEKS</span>
                 </label>
                 <label
-                  className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition ${
+                  className={`flex min-h-touch cursor-pointer items-center gap-3 rounded-af-md border-2 p-3 transition ${
                     accessMethod === 'uvm_safekey'
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
@@ -156,7 +155,7 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
             {isCoursera && (
               <>
                 <label
-                  className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition ${
+                  className={`flex min-h-touch cursor-pointer items-center gap-3 rounded-af-md border-2 p-3 transition ${
                     accessMethod === 'uvm_safekey'
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
@@ -174,7 +173,7 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
                   <span className="text-sm font-medium text-gray-900">UVM / SafeKey</span>
                 </label>
                 <label
-                  className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition ${
+                  className={`flex min-h-touch cursor-pointer items-center gap-3 rounded-af-md border-2 p-3 transition ${
                     accessMethod === 'coursera'
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
@@ -194,18 +193,19 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
               </>
             )}
           </div>
-        </div>
+        </fieldset>
       )}
 
       <div className="space-y-3">
         {isAleks && accessMethod === 'aleks' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor={`${fieldIdPrefix}-username`} className="mb-1 block text-af-label text-academy-text">
               Nombre de usuario
             </label>
             <div className="relative">
               <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
+                id={`${fieldIdPrefix}-username`}
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -221,12 +221,13 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
         {isAleks && accessMethod === 'uvm_safekey' && (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor={`${fieldIdPrefix}-email`} className="mb-1 block text-af-label text-academy-text">
                 Correo institucional
               </label>
               <div className="relative">
                 <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
+                  id={`${fieldIdPrefix}-email`}
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -249,12 +250,13 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
 
         {isCoursera && accessMethod === 'uvm_safekey' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor={`${fieldIdPrefix}-email`} className="mb-1 block text-af-label text-academy-text">
               Correo institucional
             </label>
             <div className="relative">
               <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
+                id={`${fieldIdPrefix}-email`}
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -269,12 +271,13 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
 
         {isCoursera && accessMethod === 'coursera' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor={`${fieldIdPrefix}-email`} className="mb-1 block text-af-label text-academy-text">
               Correo electrónico
             </label>
             <div className="relative">
               <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
+                id={`${fieldIdPrefix}-email`}
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -289,12 +292,13 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
 
         {isCambridge && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor={`${fieldIdPrefix}-email`} className="mb-1 block text-af-label text-academy-text">
               Correo electrónico
             </label>
             <div className="relative">
               <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
+                id={`${fieldIdPrefix}-email`}
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -309,12 +313,13 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
 
         {isFrench && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor={`${fieldIdPrefix}-username`} className="mb-1 block text-af-label text-academy-text">
               Usuario
             </label>
             <div className="relative">
               <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
+                id={`${fieldIdPrefix}-username`}
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -329,12 +334,13 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
 
         {(isAleks || isCoursera || isCambridge || isFrench) && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor={`${fieldIdPrefix}-password`} className="mb-1 block text-af-label text-academy-text">
               Contraseña
             </label>
             <div className="relative">
               <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
+                id={`${fieldIdPrefix}-password`}
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -346,7 +352,7 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
               <button
                 type="button"
                 onClick={() => setShowPassword((s) => !s)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute inset-y-0 right-0 flex min-h-touch min-w-touch items-center justify-center rounded-af-md text-academy-text-muted hover:text-academy-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"
                 aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -357,10 +363,11 @@ export function CredentialsForm({ service, category, onSubmit }: CredentialsForm
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor={`${fieldIdPrefix}-additional-info`} className="mb-1 block text-af-label text-academy-text">
           Información adicional (opcional)
         </label>
         <textarea
+          id={`${fieldIdPrefix}-additional-info`}
           value={additionalInfo}
           onChange={(e) => setAdditionalInfo(e.target.value)}
           className={textInputClass}
