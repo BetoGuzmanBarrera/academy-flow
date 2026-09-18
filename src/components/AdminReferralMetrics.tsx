@@ -2,6 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Gift, Loader2, RefreshCw, TicketCheck, Users } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  EmptyState,
+  SearchBar,
+  Select,
+  StatCard,
+} from './ui';
+import {
   calculateAdminReferralMetrics,
   emptyAdminReferralFilters,
   filterAdminReferralCodes,
@@ -92,95 +103,90 @@ export function AdminReferralMetrics() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Referidos y métricas</h2>
-          <p className="text-sm text-gray-600">
+          <Badge variant="primary">Solo lectura</Badge>
+          <h2 className="mt-3 text-af-h2 text-academy-text">Referidos y métricas</h2>
+          <p className="mt-1 text-af-body-sm text-academy-text-muted">
             Visibilidad operativa de solo lectura protegida por admin y AAL2.
           </p>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={() => void loadReferralMetrics()}
-          disabled={loading}
-          className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          loading={loading}
+          leadingIcon={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
         >
-          {loading ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
           {loading ? 'Cargando…' : 'Actualizar'}
-        </button>
+        </Button>
       </div>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <Alert variant="error" role="alert">{error}</Alert>}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <ReferralMetricCard icon={Gift} label="Códigos creados" value={metrics.codesTotal} />
-        <ReferralMetricCard icon={TicketCheck} label="Códigos utilizados" value={metrics.codesUsed} />
-        <ReferralMetricCard icon={Gift} label="Códigos sin uso" value={metrics.codesUnused} />
-        <ReferralMetricCard icon={Users} label="Usos totales" value={metrics.usesTotal} />
-        <ReferralMetricCard icon={Users} label="Clientes en muestra reciente" value={metrics.recentCustomers} />
-        <ReferralMetricCard
-          icon={TicketCheck}
+        <StatCard icon={<Gift className="h-5 w-5" />} label="Códigos creados" value={metrics.codesTotal} />
+        <StatCard icon={<TicketCheck className="h-5 w-5" />} label="Códigos utilizados" value={metrics.codesUsed} />
+        <StatCard icon={<Gift className="h-5 w-5" />} label="Códigos sin uso" value={metrics.codesUnused} />
+        <StatCard icon={<Users className="h-5 w-5" />} label="Usos totales" value={metrics.usesTotal} />
+        <StatCard icon={<Users className="h-5 w-5" />} label="Clientes en muestra reciente" value={metrics.recentCustomers} />
+        <StatCard
+          icon={<TicketCheck className="h-5 w-5" />}
           label="Descuento en muestra reciente"
           value={`$${metrics.recentDiscount.toFixed(2)}`}
         />
       </div>
 
-      <p className="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">
+      <Alert variant="info">
         Los conteos son globales. El detalle y las métricas de muestra usan hasta los 100 códigos y 100 usos más recientes.
-      </p>
+      </Alert>
 
-      <div className="rounded-xl border bg-white p-4">
+      <Card>
+        <CardContent>
         <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(190px,1fr)_auto]">
-          <label className="space-y-1 text-sm font-medium text-gray-700">
-            <span>Buscar referidos</span>
-            <input
-              type="search"
+          <div>
+            <label htmlFor="admin-referral-search" className="mb-1.5 block text-af-label text-academy-text">Buscar referidos</label>
+            <SearchBar
+              id="admin-referral-search"
               value={filters.search}
               onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+              onClear={() => setFilters((current) => ({ ...current, search: '' }))}
               placeholder="Código, propietario u orden reciente"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
             />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-gray-700">
-            <span>Uso</span>
-            <select
+          </div>
+          <Select
+            label="Uso"
               value={filters.usage}
               onChange={(event) => setFilters((current) => ({
                 ...current,
                 usage: event.target.value as AdminReferralFilters['usage'],
               }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
             >
               <option value="all">Todos</option>
               <option value="with_uses">Con usos</option>
               <option value="without_uses">Sin usos</option>
-            </select>
-          </label>
-          <button
-            type="button"
+          </Select>
+          <Button
+            variant="secondary"
             onClick={() => setFilters(emptyAdminReferralFilters)}
-            className="self-end rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="self-end"
           >
             Limpiar filtros
-          </button>
+          </Button>
         </div>
-        <p className="mt-3 text-sm text-gray-500">
+        <p className="mt-3 text-af-body-sm text-academy-text-muted" aria-live="polite">
           {filteredCodes.length} de {codes.length} códigos cargados
         </p>
-      </div>
+        </CardContent>
+      </Card>
 
       {loading ? (
-        <div className="flex min-h-48 items-center justify-center rounded-xl border bg-white">
-          <Loader2 size={36} className="animate-spin text-blue-600" />
+        <div className="flex min-h-48 items-center justify-center rounded-af-lg border border-academy-border bg-academy-surface" role="status" aria-label="Cargando referidos">
+          <Loader2 className="h-9 w-9 animate-spin text-academy-primary" aria-hidden="true" />
         </div>
       ) : codes.length === 0 ? (
-        <EmptyState message="No hay códigos de referido para mostrar." />
+        <EmptyState icon={<Gift className="h-8 w-8" />} title="Sin códigos de referido" description="No hay códigos de referido para mostrar." />
       ) : filteredCodes.length === 0 ? (
-        <EmptyState message="No hay códigos que coincidan con los filtros." />
+        <EmptyState icon={<Gift className="h-8 w-8" />} title="Sin coincidencias" description="No hay códigos que coincidan con los filtros." />
       ) : (
         <div className="overflow-x-auto rounded-xl border bg-white">
           <table className="w-full min-w-[980px] text-sm">
@@ -238,24 +244,6 @@ export function AdminReferralMetrics() {
   );
 }
 
-function ReferralMetricCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Gift;
-  label: string;
-  value: number | string;
-}) {
-  return (
-    <div className="rounded-xl border bg-white p-5 shadow-sm">
-      <Icon size={22} className="mb-3 text-blue-600" />
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
-    </div>
-  );
-}
-
 function shortId(value: string): string {
   return value.length > 8 ? `${value.slice(0, 8)}…` : value;
 }
@@ -263,8 +251,4 @@ function shortId(value: string): string {
 function formatDate(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'Fecha inválida' : date.toLocaleString('es-MX');
-}
-
-function EmptyState({ message }: { message: string }) {
-  return <div className="rounded-xl border bg-white p-10 text-center text-gray-500">{message}</div>;
 }
