@@ -18,8 +18,9 @@ import { Referrals } from './pages/Referrals';
 import { Policies } from './pages/Policies';
 import { ResetPassword } from './pages/ResetPassword';
 import { Admin } from './pages/Admin';
+import { Account } from './pages/Account';
 
-export type Page = 'home' | 'catalog' | 'about' | 'vision' | 'mission' | 'orders' | 'checkout' | 'referrals' | 'policies' | 'admin';
+export type Page = 'home' | 'catalog' | 'about' | 'vision' | 'mission' | 'orders' | 'checkout' | 'referrals' | 'policies' | 'admin' | 'account';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -111,6 +112,13 @@ function App() {
         return <Policies />;
       case 'admin':
         return <Admin />;
+      case 'account':
+        return (
+          <Account
+            onNavigate={handleNavigate}
+            onOpenChangePassword={() => setIsChangePasswordOpen(true)}
+          />
+        );
       default:
         return <Home onOpenAuth={() => setIsAuthModalOpen(true)} onNavigate={handleNavigate} />;
     }

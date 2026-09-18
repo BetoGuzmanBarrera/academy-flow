@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
-import { MessageCircle, X, Send } from 'lucide-react';
+import { MessageCircle, Send } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { Alert, Badge, Button, Drawer, EmptyState, Input, Textarea } from './ui';
+import type { BadgeVariant } from './ui';
 import type { SupportMessage } from '../lib/database.types';
 
 export function openSupportChat() {
   window.dispatchEvent(new CustomEvent('open-support-chat'));
 }
+
+const supportStatusPresentation: Record<string, { label: string; variant: BadgeVariant }> = {
+  pending: { label: 'Pendiente', variant: 'warning' },
+  in_progress: { label: 'En revisión', variant: 'primary' },
+  resolved: { label: 'Resuelto', variant: 'success' },
+};
 
 export function SupportChat() {
   const [isOpen, setIsOpen] = useState(false);
@@ -15,6 +23,7 @@ export function SupportChat() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [error, setError] = useState('');
   const { user } = useAuth();
   const userId = user?.id;
@@ -23,15 +32,31 @@ export function SupportChat() {
   const loadMessages = useCallback(async () => {
     if (!userId) return;
 
-    const { data, error } = await supabase
-      .from('support_messages')
-      .select('*')
-      .or(`user_id.eq.${userId},and(user_id.is.null,user_email.eq.${userEmail})`)
-      .order('created_at', { ascending: true });
+    setMessagesLoading(true);
+    setError('');
+    try {
+      const { data, error: loadError } = await supabase
+        .from('support_messages')
+        .select('*')
+        .or(`user_id.eq.${userId},and(user_id.is.null,user_email.eq.${userEmail})`)
+        .order('created_at', { ascending: true });
 
-    if (!error && data) {
-      setMessages(data);
+      if (loadError) {
+        setError('No se pudieron cargar los mensajes. Inténtalo de nuevo.');
+        return;
+      }
+
+      setMessages(data ?? []);
+    } catch {
+      setError('No se pudieron cargar los mensajes. Inténtalo de nuevo.');
+    } finally {
+      setMessagesLoading(false);
     }
+  }, [userEmail, userId]);
+
+  useEffect(() => {
+    setMessages([]);
+    setError('');
   }, [userEmail, userId]);
 
   useEffect(() => {
@@ -49,7 +74,7 @@ export function SupportChat() {
     if (!newMessage.trim()) return;
 
     if (!user && (!name.trim() || !email.trim())) {
-      setError('Por favor, ingresa tu nombre y correo');
+      setError('Por favor, ingresa tu nombre y correo.');
       return;
     }
 
@@ -66,7 +91,7 @@ export function SupportChat() {
       });
 
       if (sendError || !data?.message) {
-        setError('Error al enviar el mensaje');
+        setError('Error al enviar el mensaje.');
       } else {
         setNewMessage('');
         if (user) {
@@ -76,118 +101,140 @@ export function SupportChat() {
         }
       }
     } catch {
-      setError('Error inesperado al enviar el mensaje');
+      setError('Error inesperado al enviar el mensaje.');
     } finally {
       setLoading(false);
     }
   };
 
+  const supportForm = (
+    <form onSubmit={handleSendMessage} className="w-full space-y-4">
+      {!user && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label="Nombre"
+            type="text"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Tu nombre"
+            maxLength={100}
+            required
+            disabled={loading}
+          />
+          <Input
+            label="Correo electrónico"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="Tu correo"
+            maxLength={320}
+            required
+            disabled={loading}
+          />
+        </div>
+      )}
+
+      {error && (
+        <Alert variant="error" role="alert">
+          {error}
+        </Alert>
+      )}
+
+      <Textarea
+        label="Mensaje"
+        value={newMessage}
+        onChange={(event) => setNewMessage(event.target.value)}
+        placeholder="Escribe tu mensaje…"
+        disabled={loading}
+        maxLength={4000}
+        showCount
+        required
+      />
+      <Button
+        type="submit"
+        className="w-full"
+        loading={loading}
+        disabled={!newMessage.trim()}
+        leadingIcon={<Send className="h-4 w-4" aria-hidden="true" />}
+      >
+        {loading ? 'Enviando…' : 'Enviar mensaje'}
+      </Button>
+    </form>
+  );
+
   return (
     <>
       {!isOpen && (
         <button
+          type="button"
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 transition z-40"
+          aria-label="Abrir soporte"
+          className="fixed bottom-5 right-4 z-40 flex min-h-touch min-w-touch items-center justify-center rounded-af-full bg-academy-primary text-white shadow-af-elevated transition-colors hover:bg-academy-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary focus-visible:ring-offset-2 sm:bottom-6 sm:right-6"
         >
-          <MessageCircle size={24} />
+          <MessageCircle className="h-6 w-6" aria-hidden="true" />
         </button>
       )}
 
-      {isOpen && (
-        <div className="fixed bottom-6 right-6 w-96 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 flex flex-col max-h-[600px]">
-          <div className="bg-blue-600 text-white p-4 rounded-t-lg flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold">Soporte</h3>
-              <p className="text-xs text-blue-100">Estamos aquí para ayudarte</p>
+      <Drawer
+        open={isOpen}
+        onClose={() => setIsOpen(false)}
+        title="Soporte"
+        side="right"
+        className="sm:max-w-lg"
+        footer={supportForm}
+      >
+        <p className="text-af-body-sm text-academy-text-muted">
+          Envíanos un mensaje y podrás consultar aquí la respuesta.
+        </p>
+
+        <section aria-labelledby="support-history-title" className="mt-6">
+          <h3 id="support-history-title" className="text-af-h4 text-academy-text">Historial de mensajes</h3>
+
+          {messagesLoading ? (
+            <div role="status" aria-live="polite" className="py-10 text-center text-af-body-sm text-academy-text-muted">
+              Cargando mensajes…
             </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="p-1 hover:bg-blue-700 rounded transition"
-            >
-              <X size={20} />
-            </button>
-          </div>
+          ) : messages.length === 0 ? (
+            <EmptyState
+              className="mt-4"
+              icon={<MessageCircle className="h-10 w-10" />}
+              title="Todavía no hay mensajes"
+              description="Envíanos un mensaje y podrás consultar aquí la respuesta."
+            />
+          ) : (
+            <div className="mt-4 space-y-4">
+              {messages.map((msg) => {
+                const status = supportStatusPresentation[msg.status] ?? {
+                  label: msg.status,
+                  variant: 'neutral' as const,
+                };
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[400px]">
-            {messages.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
-                <MessageCircle size={48} className="mx-auto mb-2 text-gray-300" />
-                <p>Envíanos un mensaje</p>
-                <p className="text-sm">Te responderemos lo antes posible</p>
-              </div>
-            ) : (
-              messages.map((msg) => (
-                <div key={msg.id} className="space-y-2">
-                  <div className="bg-blue-50 rounded-lg p-3">
-                    <p className="text-sm font-semibold text-gray-900 mb-1">{msg.user_name}</p>
-                    <p className="text-sm text-gray-700">{msg.message}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {new Date(msg.created_at).toLocaleString('es-ES')}
-                    </p>
-                  </div>
-
-                  {msg.admin_response && (
-                    <div className="bg-gray-100 rounded-lg p-3 ml-4">
-                      <p className="text-sm font-semibold text-gray-900 mb-1">Equipo de Soporte</p>
-                      <p className="text-sm text-gray-700">{msg.admin_response}</p>
+                return (
+                  <article key={msg.id} className="rounded-af-md border border-academy-border bg-academy-background p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className="font-semibold text-academy-text">{user ? 'Tú' : msg.user_name}</p>
+                      <Badge variant={status.variant}>{status.label}</Badge>
                     </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-af-body-sm text-academy-text">{msg.message}</p>
+                    <time dateTime={msg.created_at} className="mt-2 block text-af-label-sm text-academy-text-muted">
+                      {new Date(msg.created_at).toLocaleString('es-ES')}
+                    </time>
 
-          <form onSubmit={handleSendMessage} className="p-4 border-t">
-            {!user && (
-              <div className="space-y-2 mb-3">
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Tu nombre"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  maxLength={100}
-                  required
-                />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Tu correo"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  maxLength={320}
-                  required
-                />
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-50 text-red-700 px-3 py-2 rounded-lg text-xs mb-2">
-                {error}
-              </div>
-            )}
-
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Escribe tu mensaje..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={loading}
-                maxLength={4000}
-              />
-              <button
-                type="submit"
-                disabled={loading || !newMessage.trim()}
-                className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition disabled:bg-blue-400"
-              >
-                <Send size={20} />
-              </button>
+                    {msg.admin_response && (
+                      <div className="mt-4 border-t border-academy-border pt-4">
+                        <p className="text-af-label text-academy-text">Equipo de soporte</p>
+                        <p className="mt-2 whitespace-pre-wrap break-words text-af-body-sm text-academy-text-muted">
+                          {msg.admin_response}
+                        </p>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
             </div>
-          </form>
-        </div>
-      )}
+          )}
+        </section>
+      </Drawer>
     </>
   );
 }
