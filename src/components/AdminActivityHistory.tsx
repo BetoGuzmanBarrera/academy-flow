@@ -1,6 +1,16 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Clock3, Loader2, RefreshCw, ScrollText } from 'lucide-react';
+import { Clock3, History, Loader2, RefreshCw, ScrollText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  EmptyState as UiEmptyState,
+  SearchBar,
+  Select,
+} from './ui';
 import {
   emptyAdminActivityFilters,
   emptyOrderHistoryFilters,
@@ -92,27 +102,27 @@ export function AdminActivityHistory() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Actividad y trazabilidad</h2>
-          <p className="text-sm text-gray-600">
+          <Badge variant="primary">Solo lectura</Badge>
+          <h2 className="mt-3 text-af-h2 text-academy-text">Actividad y trazabilidad</h2>
+          <p className="mt-1 text-af-body-sm text-academy-text-muted">
             Consulta de solo lectura protegida por las policies de administrador y AAL2.
           </p>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={() => void loadHistory()}
-          disabled={loading}
-          className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          loading={loading}
+          leadingIcon={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
         >
-          {loading ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
           {loading ? 'Cargando…' : 'Cargar / actualizar'}
-        </button>
+        </Button>
       </div>
 
-      <p className="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">
+      <Alert variant="info">
         Mostrando los 100 registros más recientes por sección.
-      </p>
+      </Alert>
 
       <section className="space-y-4">
         <div className="flex items-center gap-2">
@@ -120,63 +130,59 @@ export function AdminActivityHistory() {
           <h3 className="text-lg font-bold text-gray-900">Actividad administrativa</h3>
         </div>
 
-        {activityError && <ErrorMessage message={activityError} />}
+        {activityError && <Alert variant="error" role="alert">{activityError}</Alert>}
 
-        <div className="rounded-xl border bg-white p-4">
+        <Card>
+          <CardContent>
           <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_minmax(180px,1fr)_auto]">
-            <label className="space-y-1 text-sm font-medium text-gray-700">
-              <span>Buscar actividad</span>
-              <input
-                type="search"
+            <div>
+              <label htmlFor="admin-activity-search" className="mb-1.5 block text-af-label text-academy-text">Buscar actividad</label>
+              <SearchBar
+                id="admin-activity-search"
                 value={activityFilters.search}
                 onChange={(event) => setActivityFilters((current) => ({ ...current, search: event.target.value }))}
+                onClear={() => setActivityFilters((current) => ({ ...current, search: '' }))}
                 placeholder="Acción, recurso, ID o administrador"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
               />
-            </label>
-            <label className="space-y-1 text-sm font-medium text-gray-700">
-              <span>Acción</span>
-              <select
+            </div>
+            <Select
+              label="Acción"
                 value={activityFilters.action}
                 onChange={(event) => setActivityFilters((current) => ({ ...current, action: event.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
               >
                 <option value="all">Todas</option>
                 {activityActions.map((action) => <option key={action} value={action}>{action}</option>)}
-              </select>
-            </label>
-            <label className="space-y-1 text-sm font-medium text-gray-700">
-              <span>Tipo de recurso</span>
-              <select
+            </Select>
+            <Select
+              label="Tipo de recurso"
                 value={activityFilters.targetTable}
                 onChange={(event) => setActivityFilters((current) => ({ ...current, targetTable: event.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
               >
                 <option value="all">Todos</option>
                 {activityTargets.map((target) => <option key={target} value={target}>{target}</option>)}
-              </select>
-            </label>
-            <button
-              type="button"
+            </Select>
+            <Button
+              variant="secondary"
               onClick={() => setActivityFilters(emptyAdminActivityFilters)}
-              className="self-end rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="self-end"
             >
               Limpiar filtros
-            </button>
+            </Button>
           </div>
-          <p className="mt-3 text-sm text-gray-500">
+          <p className="mt-3 text-af-body-sm text-academy-text-muted" aria-live="polite">
             {filteredActivity.length} de {activityLogs.length} registros
           </p>
-        </div>
+          </CardContent>
+        </Card>
 
         {loading ? (
           <HistoryLoader />
         ) : !loaded ? (
-          <EmptyState message="Usa “Cargar / actualizar” para consultar la actividad reciente." />
+          <UiEmptyState icon={<History className="h-8 w-8" />} title="Actividad pendiente de cargar" description="Usa “Cargar / actualizar” para consultar la actividad reciente." />
         ) : activityLogs.length === 0 ? (
-          <EmptyState message="No hay actividad administrativa para mostrar." />
+          <UiEmptyState icon={<History className="h-8 w-8" />} title="Sin actividad administrativa" description="No hay actividad administrativa para mostrar." />
         ) : filteredActivity.length === 0 ? (
-          <EmptyState message="No hay actividad que coincida con los filtros." />
+          <UiEmptyState icon={<History className="h-8 w-8" />} title="Sin coincidencias" description="No hay actividad que coincida con los filtros." />
         ) : (
           <div className="overflow-x-auto rounded-xl border bg-white">
             <table className="w-full min-w-[980px] text-sm">
@@ -230,63 +236,59 @@ export function AdminActivityHistory() {
           <h3 className="text-lg font-bold text-gray-900">Historial de órdenes</h3>
         </div>
 
-        {orderHistoryError && <ErrorMessage message={orderHistoryError} />}
+        {orderHistoryError && <Alert variant="error" role="alert">{orderHistoryError}</Alert>}
 
-        <div className="rounded-xl border bg-white p-4">
+        <Card>
+          <CardContent>
           <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_minmax(180px,1fr)_auto]">
-            <label className="space-y-1 text-sm font-medium text-gray-700">
-              <span>Buscar historial</span>
-              <input
-                type="search"
+            <div>
+              <label htmlFor="admin-order-history-search" className="mb-1.5 block text-af-label text-academy-text">Buscar historial</label>
+              <SearchBar
+                id="admin-order-history-search"
                 value={orderFilters.search}
                 onChange={(event) => setOrderFilters((current) => ({ ...current, search: event.target.value }))}
+                onClear={() => setOrderFilters((current) => ({ ...current, search: '' }))}
                 placeholder="Orden o responsable"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
               />
-            </label>
-            <label className="space-y-1 text-sm font-medium text-gray-700">
-              <span>Estado anterior</span>
-              <select
+            </div>
+            <Select
+              label="Estado anterior"
                 value={orderFilters.fromStatus}
                 onChange={(event) => setOrderFilters((current) => ({ ...current, fromStatus: event.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
               >
                 <option value="all">Todos</option>
                 {ORDER_STATUSES.map((status) => <option key={status} value={status}>{getStatusLabel(status)}</option>)}
-              </select>
-            </label>
-            <label className="space-y-1 text-sm font-medium text-gray-700">
-              <span>Estado nuevo</span>
-              <select
+            </Select>
+            <Select
+              label="Estado nuevo"
                 value={orderFilters.toStatus}
                 onChange={(event) => setOrderFilters((current) => ({ ...current, toStatus: event.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
               >
                 <option value="all">Todos</option>
                 {ORDER_STATUSES.map((status) => <option key={status} value={status}>{getStatusLabel(status)}</option>)}
-              </select>
-            </label>
-            <button
-              type="button"
+            </Select>
+            <Button
+              variant="secondary"
               onClick={() => setOrderFilters(emptyOrderHistoryFilters)}
-              className="self-end rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="self-end"
             >
               Limpiar filtros
-            </button>
+            </Button>
           </div>
-          <p className="mt-3 text-sm text-gray-500">
+          <p className="mt-3 text-af-body-sm text-academy-text-muted" aria-live="polite">
             {filteredOrderHistory.length} de {orderHistory.length} registros
           </p>
-        </div>
+          </CardContent>
+        </Card>
 
         {loading ? (
           <HistoryLoader />
         ) : !loaded ? (
-          <EmptyState message="Usa “Cargar / actualizar” para consultar el historial reciente." />
+          <UiEmptyState icon={<Clock3 className="h-8 w-8" />} title="Historial pendiente de cargar" description="Usa “Cargar / actualizar” para consultar el historial reciente." />
         ) : orderHistory.length === 0 ? (
-          <EmptyState message="No hay transiciones de órdenes para mostrar." />
+          <UiEmptyState icon={<Clock3 className="h-8 w-8" />} title="Sin transiciones" description="No hay transiciones de órdenes para mostrar." />
         ) : filteredOrderHistory.length === 0 ? (
-          <EmptyState message="No hay transiciones que coincidan con los filtros." />
+          <UiEmptyState icon={<Clock3 className="h-8 w-8" />} title="Sin coincidencias" description="No hay transiciones que coincidan con los filtros." />
         ) : (
           <div className="overflow-x-auto rounded-xl border bg-white">
             <table className="w-full min-w-[820px] text-sm">
@@ -367,18 +369,10 @@ function CodeBadge({ value }: { value: string }) {
   return <span className="rounded-full bg-gray-100 px-2 py-1 font-mono text-xs text-gray-800">{value}</span>;
 }
 
-function EmptyState({ message }: { message: string }) {
-  return <div className="rounded-xl border bg-white p-10 text-center text-gray-500">{message}</div>;
-}
-
-function ErrorMessage({ message }: { message: string }) {
-  return <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">{message}</div>;
-}
-
 function HistoryLoader() {
   return (
-    <div className="flex min-h-40 items-center justify-center rounded-xl border bg-white">
-      <Loader2 size={32} className="animate-spin text-blue-600" />
+    <div className="flex min-h-40 items-center justify-center rounded-af-lg border border-academy-border bg-academy-surface" role="status" aria-label="Cargando historial">
+      <Loader2 className="h-8 w-8 animate-spin text-academy-primary" aria-hidden="true" />
     </div>
   );
 }

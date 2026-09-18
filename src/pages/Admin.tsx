@@ -18,7 +18,6 @@ import {
   Save,
   ShieldAlert,
   Trash2,
-  X,
 } from 'lucide-react';
 import type { QueryData } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
@@ -27,6 +26,21 @@ import { AdminMfaGate } from '../components/AdminMfaGate';
 import { AdminActivityHistory } from '../components/AdminActivityHistory';
 import { AdminReferralMetrics } from '../components/AdminReferralMetrics';
 import { ServiceDetails } from '../components/ServiceDetails';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  EmptyState,
+  Input,
+  Modal,
+  SearchBar,
+  Select,
+  StatCard,
+  Textarea,
+} from '../components/ui';
 import {
   getOrderProcessingBlockReason,
   requiresOrderCancellationConfirmation,
@@ -235,6 +249,7 @@ function AdminDashboard() {
   const catalogMutationLock = useRef(false);
   const revealLock = useRef(false);
   const revealTimeout = useRef<number | null>(null);
+  const tabButtons = useRef<Array<HTMLButtonElement | null>>([]);
 
   const loadData = useCallback(async () => {
     if (!isAdmin) return;
@@ -766,78 +781,117 @@ function AdminDashboard() {
     { id: 'referrals', label: 'Referidos', icon: Gift },
   ];
 
+  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+
+    event.preventDefault();
+    let nextIndex = index;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = tabs.length - 1;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+
+    setTab(tabs[nextIndex].id);
+    tabButtons.current[nextIndex]?.focus();
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+      <div className="mb-8 flex flex-col gap-5 rounded-af-lg border border-academy-border bg-gradient-to-br from-white to-blue-50/70 p-5 shadow-af-card sm:flex-row sm:items-start sm:justify-between sm:p-7">
         <div>
-          <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Administración</p>
-          <h1 className="text-3xl font-bold text-gray-900">Panel de Academy Flow</h1>
-          <p className="text-gray-600 mt-1">Gestiona catálogo, órdenes y mensajes de soporte.</p>
+          <Badge variant="primary">ADMINISTRACIÓN</Badge>
+          <h1 className="mt-4 text-af-h1 text-academy-text">Panel de Academy Flow</h1>
+          <p className="mt-2 max-w-2xl text-academy-text-muted">
+            Gestiona catálogo, órdenes, soporte y operaciones desde un solo lugar.
+          </p>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={() => void loadData()}
-          className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+          loading={loading}
+          leadingIcon={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
+          className="w-full sm:w-auto"
         >
-          <RefreshCw size={18} />
           Actualizar
-        </button>
+        </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b mb-8">
-        {tabs.map(({ id, label, icon: Icon }) => (
+      <div className="mb-8 overflow-x-auto border-b border-academy-border" role="tablist" aria-label="Secciones administrativas">
+        <div className="flex min-w-max gap-1">
+        {tabs.map(({ id, label, icon: Icon }, index) => (
           <button
             key={id}
+            ref={(element) => { tabButtons.current[index] = element; }}
+            id={`admin-tab-${id}`}
             type="button"
+            role="tab"
+            aria-selected={tab === id}
+            aria-controls={`admin-panel-${id}`}
+            tabIndex={tab === id ? 0 : -1}
             onClick={() => setTab(id)}
-            className={`flex items-center gap-2 px-4 py-3 font-medium border-b-2 transition ${
+            onKeyDown={(event) => handleTabKeyDown(event, index)}
+            className={`flex min-h-touch items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-academy-primary ${
               tab === id
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
+                ? 'border-academy-primary text-academy-primary'
+                : 'border-transparent text-academy-text-muted hover:text-academy-text'
             }`}
           >
-            <Icon size={18} />
+            <Icon className="h-4 w-4" aria-hidden="true" />
             {label}
           </button>
         ))}
+        </div>
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          {error}
-          <button className="ml-3 underline" onClick={() => setError('')}>Cerrar</button>
-        </div>
+        <Alert className="mb-6" variant="error" role="alert" title="No se pudo completar la operación">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>{error}</span>
+            <button type="button" className="font-semibold underline" onClick={() => setError('')}>Cerrar</button>
+          </div>
+        </Alert>
       )}
 
       {notice && (
-        <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">
-          {notice}
-        </div>
+        <Alert className="mb-6" variant="success" role="status">{notice}</Alert>
       )}
 
+      <div
+        id={`admin-panel-${tab}`}
+        role="tabpanel"
+        aria-labelledby={`admin-tab-${tab}`}
+        tabIndex={0}
+        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"
+      >
       {loading ? (
         <CenteredLoader />
       ) : (
         <>
           {tab === 'dashboard' && (
             <div className="space-y-8">
-              <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                <MetricCard icon={CircleDollarSign} label="Ingresos confirmados" value={`$${metrics.revenue.toFixed(2)}`} />
-                <MetricCard icon={PackageCheck} label="Órdenes" value={String(metrics.orders)} />
-                <MetricCard icon={Loader2} label="Pendientes" value={String(metrics.pendingOrders)} />
-                <MetricCard icon={Boxes} label="Servicios activos" value={String(metrics.activeServices)} />
-                <MetricCard icon={MessageSquare} label="Soporte pendiente" value={String(metrics.pendingSupport)} />
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <StatCard icon={<CircleDollarSign className="h-5 w-5" />} label="Ingresos confirmados" value={`$${metrics.revenue.toFixed(2)}`} />
+                <StatCard icon={<PackageCheck className="h-5 w-5" />} label="Órdenes" value={String(metrics.orders)} />
+                <StatCard icon={<Loader2 className="h-5 w-5" />} label="Pendientes" value={String(metrics.pendingOrders)} />
+                <StatCard icon={<Boxes className="h-5 w-5" />} label="Servicios activos" value={String(metrics.activeServices)} />
+                <StatCard icon={<MessageSquare className="h-5 w-5" />} label="Soporte pendiente" value={String(metrics.pendingSupport)} />
               </div>
 
-              <div className="grid lg:grid-cols-2 gap-6">
-                <section className="bg-white rounded-xl shadow-sm border p-6">
-                  <h2 className="font-bold text-lg mb-4">Órdenes recientes</h2>
-                  <div className="space-y-3">
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <h2 className="text-af-h3 text-academy-text">Órdenes recientes</h2>
+                    <p className="mt-1 text-af-body-sm text-academy-text-muted">Las cinco órdenes más recientes.</p>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {orders.length === 0 && (
+                      <EmptyState title="Sin órdenes recientes" description="Las órdenes aparecerán aquí cuando estén disponibles." />
+                    )}
                     {orders.slice(0, 5).map((order) => (
-                      <div key={order.id} className="flex items-center justify-between border-b pb-3 last:border-0">
+                      <div key={order.id} className="flex items-center justify-between gap-4 border-b border-academy-border pb-3 last:border-0 last:pb-0">
                         <div>
                           <p className="font-mono text-sm">#{order.id.slice(0, 8)}</p>
-                          <p className="text-xs text-gray-500">{new Date(order.created_at).toLocaleString('es-MX')}</p>
+                          <p className="text-xs text-academy-text-muted">{new Date(order.created_at).toLocaleString('es-MX')}</p>
                         </div>
                         <div className="text-right">
                           <p className="font-semibold">${Number(order.total_amount).toFixed(2)}</p>
@@ -845,101 +899,123 @@ function AdminDashboard() {
                         </div>
                       </div>
                     ))}
-                  </div>
-                </section>
+                  </CardContent>
+                </Card>
 
-                <section className="bg-white rounded-xl shadow-sm border p-6">
-                  <h2 className="font-bold text-lg mb-4">Estado del sistema</h2>
-                  <div className="space-y-3 text-sm">
+                <Card>
+                  <CardHeader>
+                    <h2 className="text-af-h3 text-academy-text">Estado del sistema</h2>
+                    <p className="mt-1 text-af-body-sm text-academy-text-muted">Controles configurados en la aplicación.</p>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
                     <SystemLine ok label="RLS y roles administrativos configurados" />
                     <SystemLine ok label="Precios calculados dentro de PostgreSQL" />
                     <SystemLine ok label="Órdenes creadas como pendientes" />
                     <SystemLine ok label="Credenciales cifradas con AES-256-GCM" />
                     <SystemLine ok label="Pagos con Stripe habilitados" />
-                  </div>
-                </section>
+                  </CardContent>
+                </Card>
               </div>
             </div>
           )}
 
           {tab === 'services' && (
             <div className="space-y-8">
-              <div className="grid lg:grid-cols-3 gap-6">
-                <form onSubmit={handleCreateCategory} className="bg-white border rounded-xl p-5 space-y-3">
-                  <h2 className="font-bold text-lg">Nueva categoría</h2>
-                  <input
-                    value={newCategoryName}
-                    onChange={(event) => setNewCategoryName(event.target.value)}
-                    placeholder="Nombre de la categoría"
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                  <button
-                    disabled={savingId === 'new-category'}
-                    className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white rounded-lg py-2 disabled:opacity-50"
-                  >
-                    <Plus size={18} /> Crear categoría
-                  </button>
-                </form>
+              <div>
+                <h2 className="text-af-h2 text-academy-text">Catálogo y servicios</h2>
+                <p className="mt-1 text-academy-text-muted">Administra categorías, disponibilidad y precios del catálogo.</p>
+              </div>
+              <div className="grid gap-6 lg:grid-cols-3">
+                <Card>
+                  <CardHeader>
+                    <h3 className="text-af-h3 text-academy-text">Nueva categoría</h3>
+                    <p className="mt-1 text-af-body-sm text-academy-text-muted">Organiza los servicios disponibles.</p>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleCreateCategory} className="space-y-4">
+                      <Input
+                        label="Nombre de la categoría"
+                        value={newCategoryName}
+                        onChange={(event) => setNewCategoryName(event.target.value)}
+                        placeholder="Ej. Idiomas"
+                      />
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        variant="secondary"
+                        loading={savingId === 'new-category'}
+                        leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+                      >
+                        Crear categoría
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
 
-                <form onSubmit={handleCreateService} className="lg:col-span-2 bg-white border rounded-xl p-5 space-y-3">
-                  <h2 className="font-bold text-lg">Nuevo servicio</h2>
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    <input
-                      required
-                      value={newService.name}
-                      onChange={(event) => setNewService((current) => ({ ...current, name: event.target.value }))}
-                      placeholder="Nombre"
-                      className="px-3 py-2 border rounded-lg"
-                    />
-                    <select
-                      required
-                      value={newService.categoryId}
-                      onChange={(event) => setNewService((current) => ({ ...current, categoryId: event.target.value }))}
-                      className="px-3 py-2 border rounded-lg"
-                    >
-                      <option value="">Selecciona categoría</option>
-                      {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                    </select>
-                    <input
-                      required
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={newService.price}
-                      onChange={(event) => setNewService((current) => ({ ...current, price: event.target.value }))}
-                      placeholder="Precio"
-                      className="px-3 py-2 border rounded-lg"
-                    />
-                    <input
-                      value={newService.description}
-                      onChange={(event) => setNewService((current) => ({ ...current, description: event.target.value }))}
-                      placeholder="Descripción"
-                      className="px-3 py-2 border rounded-lg"
-                    />
-                    <select
-                      value={newService.isActive ? 'active' : 'inactive'}
-                      onChange={(event) => setNewService((current) => ({
-                        ...current,
-                        isActive: event.target.value === 'active',
-                      }))}
-                      className="px-3 py-2 border rounded-lg"
-                      aria-label="Disponibilidad inicial"
-                    >
-                      <option value="active">Activo</option>
-                      <option value="inactive">Inactivo</option>
-                    </select>
-                  </div>
-                  <button
-                    disabled={savingId === 'new-service'}
-                    className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded-lg disabled:opacity-50"
-                  >
-                    {savingId === 'new-service' ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-                    {savingId === 'new-service' ? 'Creando…' : 'Crear servicio'}
-                  </button>
-                </form>
+                <Card className="lg:col-span-2">
+                  <CardHeader>
+                    <h3 className="text-af-h3 text-academy-text">Nuevo servicio</h3>
+                    <p className="mt-1 text-af-body-sm text-academy-text-muted">Publica una oferta usando los datos reales del catálogo.</p>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleCreateService} className="space-y-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Input
+                          required
+                          label="Nombre"
+                          value={newService.name}
+                          onChange={(event) => setNewService((current) => ({ ...current, name: event.target.value }))}
+                        />
+                        <Select
+                          required
+                          label="Categoría"
+                          value={newService.categoryId}
+                          onChange={(event) => setNewService((current) => ({ ...current, categoryId: event.target.value }))}
+                        >
+                          <option value="">Selecciona categoría</option>
+                          {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                        </Select>
+                        <Input
+                          required
+                          label="Precio (MXN)"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={newService.price}
+                          onChange={(event) => setNewService((current) => ({ ...current, price: event.target.value }))}
+                        />
+                        <Select
+                          label="Disponibilidad"
+                          value={newService.isActive ? 'active' : 'inactive'}
+                          onChange={(event) => setNewService((current) => ({
+                            ...current,
+                            isActive: event.target.value === 'active',
+                          }))}
+                        >
+                          <option value="active">Activo</option>
+                          <option value="inactive">Inactivo</option>
+                        </Select>
+                        <div className="sm:col-span-2">
+                          <Textarea
+                            label="Descripción"
+                            value={newService.description}
+                            onChange={(event) => setNewService((current) => ({ ...current, description: event.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        type="submit"
+                        loading={savingId === 'new-service'}
+                        leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+                      >
+                        {savingId === 'new-service' ? 'Creando…' : 'Crear servicio'}
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
               </div>
 
-              <div className="bg-white border rounded-xl overflow-x-auto">
+              <div className="overflow-x-auto rounded-af-lg border border-academy-border bg-academy-surface shadow-af-card">
                 <table className="w-full min-w-[900px] text-sm">
                   <thead className="bg-gray-50 text-left">
                     <tr>
@@ -975,23 +1051,20 @@ function AdminDashboard() {
                           })}
                         </td>
                         <td className="p-4">
-                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            service.is_active
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-200 text-gray-700'
-                          }`}>
+                          <Badge variant={service.is_active ? 'success' : 'neutral'}>
                             {getAdminServiceStatusLabel(service.is_active)}
-                          </span>
+                          </Badge>
                         </td>
                         <td className="p-4">
-                          <button
-                            type="button"
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={() => handleEditService(service)}
                             disabled={savingId !== null}
-                            className="inline-flex items-center gap-2 rounded-lg border border-blue-200 px-3 py-2 font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                            leadingIcon={<Pencil className="h-4 w-4" aria-hidden="true" />}
                           >
-                            <Pencil size={17} /> Editar
-                          </button>
+                            Editar
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -1002,74 +1075,74 @@ function AdminDashboard() {
           )}
 
           {tab === 'orders' && (
-            <div className="space-y-4">
-              <div className="rounded-xl border bg-white p-4">
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-af-h2 text-academy-text">Órdenes</h2>
+                <p className="mt-1 text-academy-text-muted">Consulta pagos, servicios y transiciones operativas seguras.</p>
+              </div>
+              <Card>
+                <CardContent>
                 <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(160px,1fr)_minmax(160px,1fr)_auto]">
-                  <label className="space-y-1 text-sm font-medium text-gray-700">
-                    <span>Buscar órdenes</span>
-                    <input
-                      type="search"
+                  <div>
+                    <label htmlFor="admin-order-search" className="mb-1.5 block text-af-label text-academy-text">Buscar órdenes</label>
+                    <SearchBar
+                      id="admin-order-search"
                       value={orderFilters.search}
                       onChange={(event) => setOrderFilters((current) => ({
                         ...current,
                         search: event.target.value,
                       }))}
+                      onClear={() => setOrderFilters((current) => ({ ...current, search: '' }))}
                       placeholder="Buscar por orden o servicio"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
                     />
-                  </label>
+                  </div>
 
-                  <label className="space-y-1 text-sm font-medium text-gray-700">
-                    <span>Estado de orden</span>
-                    <select
+                  <Select
+                    label="Estado de orden"
                       value={orderFilters.status}
                       onChange={(event) => setOrderFilters((current) => ({
                         ...current,
                         status: event.target.value as AdminOrderStatusFilter,
                       }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
                     >
                       <option value="all">Todos</option>
                       <option value="pending">Pendientes</option>
                       <option value="in_progress">En proceso</option>
                       <option value="completed">Completadas</option>
                       <option value="cancelled">Canceladas</option>
-                    </select>
-                  </label>
+                  </Select>
 
-                  <label className="space-y-1 text-sm font-medium text-gray-700">
-                    <span>Estado de pago</span>
-                    <select
+                  <Select
+                    label="Estado de pago"
                       value={orderFilters.paymentStatus}
                       onChange={(event) => setOrderFilters((current) => ({
                         ...current,
                         paymentStatus: event.target.value as AdminPaymentStatusFilter,
                       }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
                     >
                       <option value="all">Todos</option>
                       <option value="paid">Pagado</option>
                       <option value="pending">Pendiente</option>
                       <option value="failed">Fallido</option>
                       <option value="refunded">Reembolsado</option>
-                    </select>
-                  </label>
+                  </Select>
 
                   {orderFiltersActive && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
                       onClick={() => setOrderFilters(emptyAdminOrderFilters)}
-                      className="self-end rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50"
+                      className="self-end"
                     >
                       Limpiar filtros
-                    </button>
+                    </Button>
                   )}
                 </div>
 
-                <p className="mt-3 text-sm text-gray-600" aria-live="polite">
+                <p className="mt-3 text-af-body-sm text-academy-text-muted" aria-live="polite">
                   Mostrando {filteredOrders.length} de {orders.length} órdenes
                 </p>
-              </div>
+                </CardContent>
+              </Card>
 
               <div className="overflow-x-auto rounded-xl border bg-white">
                 <table className="w-full min-w-[850px] text-sm">
@@ -1122,7 +1195,7 @@ function AdminDashboard() {
                                 value={order.status}
                                 disabled={savingId === order.id}
                                 onChange={(event) => void handleOrderStatusSelection(order, event.target.value as Order['status'])}
-                                className="px-3 py-2 border rounded-lg text-sm"
+                                className="min-h-touch rounded-af-md border border-academy-border bg-academy-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"
                                 aria-label={`Cambiar estado de la orden ${order.id.slice(0, 8)}`}
                               >
                                 <option value={order.status} disabled>Cambiar estado…</option>
@@ -1148,32 +1221,28 @@ function AdminDashboard() {
               <section className="space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 className="text-lg font-bold text-gray-900">Credenciales cifradas</h2>
-                    <p className="text-sm text-gray-600">
+                    <Badge variant="warning">Acceso sensible</Badge>
+                    <h2 className="mt-3 text-af-h2 text-academy-text">Credenciales cifradas</h2>
+                    <p className="mt-1 text-af-body-sm text-academy-text-muted">
                       El contenido solo se obtiene tras una confirmación explícita y cada intento queda auditado.
                     </p>
                   </div>
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
                     onClick={() => void loadCredentials()}
-                    disabled={credentialsLoading || credentialAuditLoading}
-                    className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    loading={credentialsLoading || credentialAuditLoading}
+                    leadingIcon={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
                   >
-                    {(credentialsLoading || credentialAuditLoading) ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
                     {(credentialsLoading || credentialAuditLoading) ? 'Cargando…' : 'Cargar / actualizar'}
-                  </button>
+                  </Button>
                 </div>
 
-                {revealError && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-                    {revealError}
-                  </div>
-                )}
+                {revealError && <Alert variant="error" role="alert">{revealError}</Alert>}
 
                 {revealedCredential && (() => {
                   const { methodLabel, fields } = getCredentialFields(revealedCredential.decrypted);
                   return (
-                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
+                    <Alert variant="info" role="status" className="block">
                       <div className="mb-3 flex items-start justify-between gap-4">
                         <div>
                           <h3 className="flex items-center gap-2 font-bold">
@@ -1191,7 +1260,7 @@ function AdminDashboard() {
                             revealTimeout.current = null;
                             setRevealedCredential(null);
                           }}
-                          className="rounded p-1 hover:bg-blue-100"
+                          className="flex min-h-touch min-w-touch items-center justify-center rounded-af-md hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"
                           title="Ocultar"
                           aria-label="Ocultar credencial revelada"
                         >
@@ -1211,31 +1280,30 @@ function AdminDashboard() {
                           ))}
                         </dl>
                       )}
-                    </div>
+                    </Alert>
                   );
                 })()}
 
-                <div className="rounded-xl border bg-white p-4">
+                <Card>
+                  <CardContent>
                   <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(190px,1fr)_auto]">
-                    <label className="space-y-1 text-sm font-medium text-gray-700">
-                      <span>Buscar credenciales</span>
-                      <input
-                        type="search"
+                    <div>
+                      <label htmlFor="admin-credential-search" className="mb-1.5 block text-af-label text-academy-text">Buscar credenciales</label>
+                      <SearchBar
+                        id="admin-credential-search"
                         value={credentialFilters.search}
                         onChange={(event) => setCredentialFilters((current) => ({ ...current, search: event.target.value }))}
+                        onClear={() => setCredentialFilters((current) => ({ ...current, search: '' }))}
                         placeholder="Orden, servicio o credencial"
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
                       />
-                    </label>
-                    <label className="space-y-1 text-sm font-medium text-gray-700">
-                      <span>Estado</span>
-                      <select
+                    </div>
+                    <Select
+                      label="Estado"
                         value={credentialFilters.state}
                         onChange={(event) => setCredentialFilters((current) => ({
                           ...current,
                           state: event.target.value as AdminCredentialFilters['state'],
                         }))}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
                       >
                         <option value="all">Todos</option>
                         <option value="available">Vigentes</option>
@@ -1243,31 +1311,27 @@ function AdminDashboard() {
                         <option value="expired">Expiradas</option>
                         <option value="deleted">Eliminadas</option>
                         <option value="unavailable">No disponibles</option>
-                      </select>
-                    </label>
-                    <button
-                      type="button"
+                    </Select>
+                    <Button
+                      variant="secondary"
                       onClick={() => setCredentialFilters(emptyAdminCredentialFilters)}
-                      className="self-end rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      className="self-end"
                     >
                       Limpiar
-                    </button>
+                    </Button>
                   </div>
-                  <p className="mt-3 text-sm text-gray-500">
+                  <p className="mt-3 text-af-body-sm text-academy-text-muted" aria-live="polite">
                     {filteredCredentials.length} de {credentialRows.length} credenciales
                   </p>
-                </div>
+                  </CardContent>
+                </Card>
 
                 {credentialsLoading ? (
                   <CenteredLoader />
                 ) : credentialRows.length === 0 ? (
-                  <div className="rounded-xl border bg-white p-10 text-center text-gray-500">
-                    No hay credenciales registradas. Usa “Cargar / actualizar” para consultar el inventario seguro.
-                  </div>
+                  <EmptyState icon={<KeyRound className="h-8 w-8" />} title="Inventario pendiente de cargar" description="No hay credenciales registradas. Usa “Cargar / actualizar” para consultar el inventario seguro." />
                 ) : filteredCredentials.length === 0 ? (
-                  <div className="rounded-xl border bg-white p-10 text-center text-gray-500">
-                    No hay credenciales que coincidan con los filtros.
-                  </div>
+                  <EmptyState icon={<KeyRound className="h-8 w-8" />} title="Sin coincidencias" description="No hay credenciales que coincidan con los filtros." />
                 ) : (
                   <div className="overflow-x-auto rounded-xl border bg-white">
                     <table className="w-full min-w-[1180px] text-sm">
@@ -1306,18 +1370,18 @@ function AdminDashboard() {
                                 {credential.deletedAt && <p><span className="font-semibold">Eliminada:</span> {formatAdminDate(credential.deletedAt)}</p>}
                               </td>
                               <td className="p-4">
-                                <button
-                                  type="button"
+                                <Button
+                                  size="sm"
                                   onClick={() => {
                                     setRevealError('');
                                     setPendingRevealCredential(credential);
                                   }}
                                   disabled={!revealable || revealLoadingId !== null}
-                                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                  loading={revealLoadingId === credential.credentialId}
+                                  leadingIcon={<Eye className="h-4 w-4" aria-hidden="true" />}
                                 >
-                                  {revealLoadingId === credential.credentialId ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
                                   Revelar
-                                </button>
+                                </Button>
                                 {!revealable && <p className="mt-2 max-w-36 text-xs text-gray-500">No hay material vigente para revelar.</p>}
                               </td>
                             </tr>
@@ -1337,73 +1401,61 @@ function AdminDashboard() {
                   </p>
                 </div>
 
-                {credentialAuditError && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-                    {credentialAuditError}
-                  </div>
-                )}
+                {credentialAuditError && <Alert variant="error" role="alert">{credentialAuditError}</Alert>}
 
-                <div className="rounded-xl border bg-white p-4">
+                <Card>
+                  <CardContent>
                   <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_minmax(180px,1fr)_auto]">
-                    <label className="space-y-1 text-sm font-medium text-gray-700">
-                      <span>Buscar auditoría</span>
-                      <input
-                        type="search"
+                    <div>
+                      <label htmlFor="admin-credential-audit-search" className="mb-1.5 block text-af-label text-academy-text">Buscar auditoría</label>
+                      <SearchBar
+                        id="admin-credential-audit-search"
                         value={credentialAuditFilters.search}
                         onChange={(event) => setCredentialAuditFilters((current) => ({ ...current, search: event.target.value }))}
+                        onClear={() => setCredentialAuditFilters((current) => ({ ...current, search: '' }))}
                         placeholder="Orden, credencial, request o motivo"
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
                       />
-                    </label>
-                    <label className="space-y-1 text-sm font-medium text-gray-700">
-                      <span>Acción</span>
-                      <select
+                    </div>
+                    <Select
+                      label="Acción"
                         value={credentialAuditFilters.action}
                         onChange={(event) => setCredentialAuditFilters((current) => ({ ...current, action: event.target.value }))}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
                       >
                         <option value="all">Todas</option>
                         {credentialAuditActions.map((action) => <option key={action} value={action}>{action}</option>)}
-                      </select>
-                    </label>
-                    <label className="space-y-1 text-sm font-medium text-gray-700">
-                      <span>Resultado</span>
-                      <select
+                    </Select>
+                    <Select
+                      label="Resultado"
                         value={credentialAuditFilters.outcome}
                         onChange={(event) => setCredentialAuditFilters((current) => ({
                           ...current,
                           outcome: event.target.value as AdminCredentialAuditFilters['outcome'],
                         }))}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
                       >
                         <option value="all">Todos</option>
                         <option value="success">Éxito</option>
                         <option value="failure">Fallo</option>
-                      </select>
-                    </label>
-                    <button
-                      type="button"
+                    </Select>
+                    <Button
+                      variant="secondary"
                       onClick={() => setCredentialAuditFilters(emptyAdminCredentialAuditFilters)}
-                      className="self-end rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      className="self-end"
                     >
                       Limpiar
-                    </button>
+                    </Button>
                   </div>
-                  <p className="mt-3 text-sm text-gray-500">
+                  <p className="mt-3 text-af-body-sm text-academy-text-muted" aria-live="polite">
                     {filteredCredentialAuditLogs.length} de {credentialAuditLogs.length} registros cargados
                   </p>
-                </div>
+                  </CardContent>
+                </Card>
 
                 {credentialAuditLoading ? (
                   <CenteredLoader />
                 ) : credentialAuditLogs.length === 0 ? (
-                  <div className="rounded-xl border bg-white p-10 text-center text-gray-500">
-                    No hay registros de auditoría para mostrar.
-                  </div>
+                  <EmptyState icon={<History className="h-8 w-8" />} title="Sin registros de auditoría" description="No hay registros de auditoría para mostrar." />
                 ) : filteredCredentialAuditLogs.length === 0 ? (
-                  <div className="rounded-xl border bg-white p-10 text-center text-gray-500">
-                    No hay registros que coincidan con los filtros.
-                  </div>
+                  <EmptyState icon={<History className="h-8 w-8" />} title="Sin coincidencias" description="No hay registros que coincidan con los filtros." />
                 ) : (
                   <div className="overflow-x-auto rounded-xl border bg-white">
                     <table className="w-full min-w-[1180px] text-sm">
@@ -1447,64 +1499,70 @@ function AdminDashboard() {
           {tab === 'referrals' && <AdminReferralMetrics />}
 
           {tab === 'support' && (
-            <div className="space-y-4">
-              <div className="rounded-xl border bg-white p-4">
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-af-h2 text-academy-text">Soporte</h2>
+                <p className="mt-1 text-academy-text-muted">Consulta mensajes, responde y actualiza su estado operativo.</p>
+              </div>
+              <Card>
+                <CardContent>
                 <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_auto]">
-                  <label className="space-y-1 text-sm font-medium text-gray-700">
-                    <span>Buscar mensajes</span>
-                    <input
-                      type="search"
+                  <div>
+                    <label htmlFor="admin-support-search" className="mb-1.5 block text-af-label text-academy-text">Buscar mensajes</label>
+                    <SearchBar
+                      id="admin-support-search"
                       value={supportFilters.search}
                       onChange={(event) => setSupportFilters((current) => ({
                         ...current,
                         search: event.target.value,
                       }))}
+                      onClear={() => setSupportFilters((current) => ({ ...current, search: '' }))}
                       placeholder="Mensaje, usuario, nombre o correo"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
                     />
-                  </label>
+                  </div>
 
-                  <label className="space-y-1 text-sm font-medium text-gray-700">
-                    <span>Estado</span>
-                    <select
+                  <Select
+                    label="Estado"
                       value={supportFilters.status}
                       onChange={(event) => setSupportFilters((current) => ({
                         ...current,
                         status: event.target.value as AdminSupportStatusFilter,
                       }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
                     >
                       <option value="all">Todos</option>
                       <option value="pending">Pendientes</option>
                       <option value="in_progress">En proceso</option>
                       <option value="resolved">Resueltos</option>
-                    </select>
-                  </label>
+                  </Select>
 
                   {supportFiltersActive && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
                       onClick={() => setSupportFilters(emptyAdminSupportFilters)}
-                      className="self-end rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50"
+                      className="self-end"
                     >
                       Limpiar filtros
-                    </button>
+                    </Button>
                   )}
                 </div>
 
-                <p className="mt-3 text-sm text-gray-600" aria-live="polite">
+                <p className="mt-3 text-af-body-sm text-academy-text-muted" aria-live="polite">
                   Mostrando {filteredMessages.length} de {messages.length} mensajes
                 </p>
-              </div>
+                </CardContent>
+              </Card>
 
               {filteredMessages.length === 0 ? (
-                <div className="bg-white border rounded-xl p-10 text-center text-gray-500">
-                  {messages.length === 0
+                <EmptyState
+                  icon={<MessageSquare className="h-8 w-8" />}
+                  title={messages.length === 0 ? 'Sin mensajes de soporte' : 'Sin coincidencias'}
+                  description={messages.length === 0
                     ? 'No hay mensajes de soporte.'
                     : 'No se encontraron mensajes con estos filtros.'}
-                </div>
+                />
               ) : filteredMessages.map((message) => (
-                <article key={message.id} className="bg-white border rounded-xl p-5">
+                <Card key={message.id}>
+                  <article className="p-5 sm:p-6">
                   <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                     <div>
                       <h2 className="font-bold">{message.user_name}</h2>
@@ -1528,7 +1586,7 @@ function AdminDashboard() {
                           message,
                           event.target.value as SupportMessage['status'],
                         )}
-                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-50"
+                        className="min-h-touch rounded-af-md border border-academy-border bg-academy-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary disabled:opacity-50"
                       >
                         <option value="pending">Pendiente</option>
                         <option value="in_progress">En proceso</option>
@@ -1536,149 +1594,137 @@ function AdminDashboard() {
                       </select>
                     </div>
                   </div>
-                  <p className="bg-blue-50 rounded-lg p-4 text-gray-800 mb-4 whitespace-pre-wrap">{message.message}</p>
-                  <textarea
+                  <p className="mb-4 whitespace-pre-wrap rounded-af-md bg-blue-50 p-4 text-academy-text">{message.message}</p>
+                  <Textarea
+                    label={`Respuesta para ${message.user_name}`}
                     value={responseDrafts[message.id] ?? ''}
                     onChange={(event) => setResponseDrafts((current) => ({ ...current, [message.id]: event.target.value }))}
                     placeholder="Respuesta del administrador"
-                    className="w-full border rounded-lg p-3 min-h-24"
                   />
-                  <button
-                    type="button"
+                  <Button
+                    className="mt-3"
                     onClick={() => void handleSupportResponse(message)}
-                    disabled={savingId === message.id}
-                    className="mt-3 flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                    loading={savingId === message.id}
+                    leadingIcon={<Save className="h-4 w-4" aria-hidden="true" />}
                   >
-                    {savingId === message.id ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                     Guardar respuesta y resolver
-                  </button>
-                </article>
+                  </Button>
+                  </article>
+                </Card>
               ))}
             </div>
           )}
         </>
       )}
+      </div>
 
       {pendingRevealCredential && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="reveal-credential-title"
-            aria-describedby="reveal-credential-description"
-            className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"
-          >
-            <div className="flex items-start gap-3">
-              <div className="rounded-full bg-blue-100 p-2 text-blue-700">
-                <KeyRound size={24} />
-              </div>
-              <div>
-                <h2 id="reveal-credential-title" className="text-xl font-bold text-gray-900">
-                  Confirmar revelado de credencial
-                </h2>
-                <p id="reveal-credential-description" className="mt-2 text-sm text-gray-700">
-                  Esta acción descifrará temporalmente la credencial y quedará registrada en la auditoría.
-                </p>
-                <div className="mt-4 rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
-                  <p><span className="font-semibold">Orden:</span> #{shortId(pendingRevealCredential.orderId)}</p>
-                  <p className="mt-1"><span className="font-semibold">Servicio:</span> {pendingRevealCredential.serviceName}</p>
-                </div>
-              </div>
-            </div>
-
-            {revealError && (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {revealError}
-              </div>
-            )}
-
-            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
-                type="button"
+        <Modal
+          open
+          title="Confirmar revelado de credencial"
+          onClose={() => setPendingRevealCredential(null)}
+          dismissible={revealLoadingId === null}
+          footer={(
+            <>
+              <Button
+                variant="secondary"
                 onClick={() => setPendingRevealCredential(null)}
                 disabled={revealLoadingId !== null}
-                className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
                 Volver
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
                 onClick={() => void handleRevealCredential(pendingRevealCredential)}
+                loading={revealLoadingId === pendingRevealCredential.credentialId}
                 disabled={revealLoadingId !== null}
-                className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                leadingIcon={<Eye className="h-4 w-4" aria-hidden="true" />}
               >
-                {revealLoadingId === pendingRevealCredential.credentialId ? <Loader2 size={18} className="animate-spin" /> : <Eye size={18} />}
                 {revealLoadingId === pendingRevealCredential.credentialId ? 'Revelando…' : 'Revelar credencial'}
-              </button>
+              </Button>
+            </>
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+              <KeyRound className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-sm text-academy-text-muted">
+                Esta acción descifrará temporalmente la credencial y quedará registrada en la auditoría.
+              </p>
+              <div className="mt-4 rounded-af-md bg-academy-subtle p-3 text-sm text-academy-text">
+                <p><span className="font-semibold">Orden:</span> #{shortId(pendingRevealCredential.orderId)}</p>
+                <p className="mt-1"><span className="font-semibold">Servicio:</span> {pendingRevealCredential.serviceName}</p>
+              </div>
             </div>
           </div>
-        </div>
+          {revealError && <Alert className="mt-4" variant="error" role="alert">{revealError}</Alert>}
+        </Modal>
       )}
 
       {editingService && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="edit-service-title"
-            className="w-full max-w-xl rounded-xl bg-white p-6 shadow-xl"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 id="edit-service-title" className="text-xl font-bold text-gray-900">
-                  Editar servicio
-                </h2>
-                <p className="mt-1 text-sm text-gray-600">
-                  Actualiza sus datos o desactívalo para ocultarlo a nuevos clientes.
-                </p>
-              </div>
-              <button
-                type="button"
+        <Modal
+          open
+          title="Editar servicio"
+          className="max-w-xl"
+          dismissible={savingId !== editingService.id}
+          onClose={() => {
+            setEditingService(null);
+            setError('');
+          }}
+          footer={(
+            <>
+              <Button
+                variant="secondary"
                 onClick={() => {
                   setEditingService(null);
                   setError('');
                 }}
                 disabled={savingId === editingService.id}
-                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
-                aria-label="Cerrar edición"
               >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1 text-sm font-medium text-gray-700 sm:col-span-2">
-                <span>Nombre</span>
-                <input
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => void handleSaveService()}
+                loading={savingId === editingService.id}
+                leadingIcon={<Save className="h-4 w-4" aria-hidden="true" />}
+              >
+                {savingId === editingService.id ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </>
+          )}
+        >
+          <p className="mb-5 text-sm text-academy-text-muted">
+            Actualiza sus datos o desactívalo para ocultarlo a nuevos clientes.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Input
+                label="Nombre"
                   required
                   value={editingService.draft.name}
                   onChange={(event) => setEditingService((current) => current ? {
                     ...current,
                     draft: { ...current.draft, name: event.target.value },
                   } : current)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
-                />
-              </label>
-              <label className="space-y-1 text-sm font-medium text-gray-700">
-                <span>Categoría</span>
-                <select
+              />
+            </div>
+            <Select
+              label="Categoría"
                   required
                   value={editingService.draft.categoryId}
                   onChange={(event) => setEditingService((current) => current ? {
                     ...current,
                     draft: { ...current.draft, categoryId: event.target.value },
                   } : current)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
                 >
                   <option value="">Selecciona categoría</option>
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>{category.name}</option>
                   ))}
-                </select>
-              </label>
-              <label className="space-y-1 text-sm font-medium text-gray-700">
-                <span>Precio (MXN)</span>
-                <input
+            </Select>
+            <Input
+              label="Precio (MXN)"
                   required
                   type="number"
                   min="0"
@@ -1688,127 +1734,80 @@ function AdminDashboard() {
                     ...current,
                     draft: { ...current.draft, price: event.target.value },
                   } : current)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
-                />
-              </label>
-              <label className="space-y-1 text-sm font-medium text-gray-700 sm:col-span-2">
-                <span>Descripción</span>
-                <textarea
+            />
+            <div className="sm:col-span-2">
+              <Textarea
+                label="Descripción"
                   value={editingService.draft.description}
                   onChange={(event) => setEditingService((current) => current ? {
                     ...current,
                     draft: { ...current.draft, description: event.target.value },
                   } : current)}
                   rows={3}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
-                />
-              </label>
-              <label className="space-y-1 text-sm font-medium text-gray-700 sm:col-span-2">
-                <span>Disponibilidad</span>
-                <select
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Select
+                label="Disponibilidad"
                   value={editingService.draft.isActive ? 'active' : 'inactive'}
                   onChange={(event) => setEditingService((current) => current ? {
                     ...current,
                     draft: { ...current.draft, isActive: event.target.value === 'active' },
                   } : current)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal"
+                  helperText="Los servicios inactivos conservan su historial y no están disponibles para nuevas compras."
                 >
                   <option value="active">Activo</option>
                   <option value="inactive">Inactivo</option>
-                </select>
-                <p className="text-xs font-normal text-gray-500">
-                  Los servicios inactivos conservan su historial y no están disponibles para nuevas compras.
-                </p>
-              </label>
-            </div>
-
-            {error && (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
-            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingService(null);
-                  setError('');
-                }}
-                disabled={savingId === editingService.id}
-                className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSaveService()}
-                disabled={savingId === editingService.id}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {savingId === editingService.id ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                {savingId === editingService.id ? 'Guardando…' : 'Guardar'}
-              </button>
+              </Select>
             </div>
           </div>
-        </div>
+          {error && <Alert className="mt-4" variant="error" role="alert">{error}</Alert>}
+        </Modal>
       )}
 
       {pendingCancellationOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="cancel-order-title"
-            aria-describedby="cancel-order-description"
-            className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"
-          >
-            <div className="flex items-start gap-3">
-              <div className="rounded-full bg-red-100 p-2 text-red-700">
-                <ShieldAlert size={24} />
-              </div>
-              <div>
-                <h2 id="cancel-order-title" className="text-xl font-bold text-gray-900">
-                  ¿Cancelar la orden #{pendingCancellationOrder.id.slice(0, 8)}?
-                </h2>
-                <p id="cancel-order-description" className="mt-3 text-gray-700">
-                  Cancelar esta orden eliminará de forma irreversible las credenciales asociadas.
-                </p>
-                <p className="mt-2 font-semibold text-red-700">Esta acción no se puede deshacer.</p>
-                <div className="mt-4 rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
-                  <span className="font-semibold">Servicios:</span>{' '}
-                  {getOrderServiceSummary(pendingCancellationOrder)}
-                </div>
-              </div>
-            </div>
-
-            {cancellationError && (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {cancellationError}
-              </div>
-            )}
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
+        <Modal
+          open
+          title={`¿Cancelar la orden #${pendingCancellationOrder.id.slice(0, 8)}?`}
+          onClose={() => setPendingCancellationOrder(null)}
+          dismissible={!cancellationLoading}
+          footer={(
+            <>
+              <Button
+                variant="secondary"
                 onClick={() => setPendingCancellationOrder(null)}
                 disabled={cancellationLoading}
-                className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
                 Volver
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="destructive"
                 onClick={() => void handleConfirmOrderCancellation()}
-                disabled={cancellationLoading}
-                className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                loading={cancellationLoading}
+                leadingIcon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
               >
-                {cancellationLoading ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
                 {cancellationLoading ? 'Cancelando…' : 'Cancelar orden'}
-              </button>
+              </Button>
+            </>
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-700">
+              <ShieldAlert className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-academy-text">
+                Cancelar esta orden eliminará de forma irreversible las credenciales asociadas.
+              </p>
+              <p className="mt-2 font-semibold text-academy-danger">Esta acción no se puede deshacer.</p>
+              <div className="mt-4 rounded-af-md bg-academy-subtle p-3 text-sm text-academy-text">
+                <span className="font-semibold">Servicios:</span>{' '}
+                {getOrderServiceSummary(pendingCancellationOrder)}
+              </div>
             </div>
           </div>
-        </div>
+          {cancellationError && <Alert className="mt-4" variant="error" role="alert">{cancellationError}</Alert>}
+        </Modal>
       )}
     </div>
   );
@@ -1824,8 +1823,8 @@ function getOrderServiceSummary(order: AdminOrder): string {
 
 function CenteredLoader() {
   return (
-    <div className="min-h-64 flex items-center justify-center">
-      <Loader2 size={40} className="animate-spin text-blue-600" />
+    <div className="flex min-h-64 items-center justify-center" role="status" aria-label="Cargando panel administrativo">
+      <Loader2 className="h-10 w-10 animate-spin text-academy-primary" aria-hidden="true" />
     </div>
   );
 }
@@ -1842,12 +1841,12 @@ function formatAdminDate(value: string | null): string {
 }
 
 function CredentialLifecycleBadge({ state }: { state: CredentialLifecycleState }) {
-  const styles: Record<CredentialLifecycleState, string> = {
-    available: 'bg-green-100 text-green-800',
-    expiring_soon: 'bg-yellow-100 text-yellow-800',
-    expired: 'bg-orange-100 text-orange-800',
-    deleted: 'bg-red-100 text-red-800',
-    unavailable: 'bg-gray-200 text-gray-800',
+  const variants: Record<CredentialLifecycleState, 'success' | 'warning' | 'danger' | 'neutral'> = {
+    available: 'success',
+    expiring_soon: 'warning',
+    expired: 'warning',
+    deleted: 'danger',
+    unavailable: 'neutral',
   };
   const labels: Record<CredentialLifecycleState, string> = {
     available: 'Vigente',
@@ -1857,41 +1856,19 @@ function CredentialLifecycleBadge({ state }: { state: CredentialLifecycleState }
     unavailable: 'No disponible',
   };
 
-  return <span className={`rounded-full px-2 py-1 text-xs font-semibold ${styles[state]}`}>{labels[state]}</span>;
+  return <Badge variant={variants[state]}>{labels[state]}</Badge>;
 }
 
 function AuditOutcomeBadge({ success }: { success: boolean }) {
-  return (
-    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-      {success ? 'Éxito' : 'Fallo'}
-    </span>
-  );
-}
-
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof BarChart3;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="bg-white border rounded-xl p-5 shadow-sm">
-      <Icon size={24} className="text-blue-600 mb-3" />
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-    </div>
-  );
+  return <Badge variant={success ? 'success' : 'danger'}>{success ? 'Éxito' : 'Fallo'}</Badge>;
 }
 
 function StatusBadge({ status }: { status: Order['status'] }) {
-  const classes: Record<Order['status'], string> = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    in_progress: 'bg-blue-100 text-blue-800',
-    completed: 'bg-green-100 text-green-800',
-    cancelled: 'bg-red-100 text-red-800',
+  const variants: Record<Order['status'], 'warning' | 'primary' | 'success' | 'danger'> = {
+    pending: 'warning',
+    in_progress: 'primary',
+    completed: 'success',
+    cancelled: 'danger',
   };
 
   const labels: Record<Order['status'], string> = {
@@ -1902,21 +1879,18 @@ function StatusBadge({ status }: { status: Order['status'] }) {
   };
 
   return (
-    <span
-      className={`text-xs px-2 py-1 rounded-full ${classes[status]}`}
-      aria-label={`Estado de orden: ${labels[status]}`}
-    >
+    <Badge variant={variants[status]} aria-label={`Estado de orden: ${labels[status]}`}>
       {labels[status]}
-    </span>
+    </Badge>
   );
 }
 
 function PaymentBadge({ status }: { status: Order['payment_status'] }) {
-  const classes: Record<Order['payment_status'], string> = {
-    paid: 'bg-green-100 text-green-800',
-    pending: 'bg-yellow-100 text-yellow-800',
-    failed: 'bg-red-100 text-red-800',
-    refunded: 'bg-gray-200 text-gray-800',
+  const variants: Record<Order['payment_status'], 'success' | 'warning' | 'danger' | 'neutral'> = {
+    paid: 'success',
+    pending: 'warning',
+    failed: 'danger',
+    refunded: 'neutral',
   };
 
   const labels: Record<Order['payment_status'], string> = {
@@ -1927,20 +1901,17 @@ function PaymentBadge({ status }: { status: Order['payment_status'] }) {
   };
 
   return (
-    <span
-      className={`text-xs px-2 py-1 rounded-full ${classes[status]}`}
-      aria-label={`Estado de pago: ${labels[status]}`}
-    >
+    <Badge variant={variants[status]} aria-label={`Estado de pago: ${labels[status]}`}>
       {labels[status]}
-    </span>
+    </Badge>
   );
 }
 
 function SupportStatusBadge({ status }: { status: SupportMessage['status'] }) {
-  const classes: Record<SupportMessage['status'], string> = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    in_progress: 'bg-blue-100 text-blue-800',
-    resolved: 'bg-green-100 text-green-800',
+  const variants: Record<SupportMessage['status'], 'warning' | 'primary' | 'success'> = {
+    pending: 'warning',
+    in_progress: 'primary',
+    resolved: 'success',
   };
   const labels: Record<SupportMessage['status'], string> = {
     pending: 'Pendiente',
@@ -1949,12 +1920,9 @@ function SupportStatusBadge({ status }: { status: SupportMessage['status'] }) {
   };
 
   return (
-    <span
-      className={`rounded-full px-3 py-1 text-xs font-semibold ${classes[status]}`}
-      aria-label={`Estado de soporte: ${labels[status]}`}
-    >
+    <Badge variant={variants[status]} aria-label={`Estado de soporte: ${labels[status]}`}>
       {labels[status]}
-    </span>
+    </Badge>
   );
 }
 
@@ -1984,7 +1952,7 @@ function getOrderTransitions(currentStatus: Order['status']): { value: Order['st
 function SystemLine({ ok = false, label }: { ok?: boolean; label: string }) {
   return (
     <div className="flex items-center gap-3">
-      {ok ? <CheckCircle2 size={18} className="text-green-600" /> : <ShieldAlert size={18} className="text-yellow-600" />}
+      {ok ? <CheckCircle2 size={18} className="text-green-600" aria-hidden="true" /> : <ShieldAlert size={18} className="text-yellow-600" aria-hidden="true" />}
       <span>{label}</span>
     </div>
   );
