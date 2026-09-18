@@ -53,6 +53,19 @@ test('SupportChat preserves its event and authenticated message query', () => {
   assert.match(supportSource, /\.order\(['"]created_at['"],\s*\{\s*ascending:\s*true\s*\}\)/);
 });
 
+test('SupportChat clears a stale error before loading message history again', () => {
+  const loadMessagesStart = supportSource.indexOf('const loadMessages');
+  const messagesQueryStart = supportSource.indexOf(".from('support_messages')", loadMessagesStart);
+  const loadMessagesPrefix = supportSource.slice(loadMessagesStart, messagesQueryStart);
+
+  assert.notEqual(loadMessagesStart, -1);
+  assert.notEqual(messagesQueryStart, -1);
+  assert.match(
+    loadMessagesPrefix,
+    /setMessagesLoading\(true\);\s*setError\(''\);\s*try\s*\{/,
+  );
+});
+
 test('SupportChat preserves the secure Edge Function and exact guest/auth payloads', () => {
   assert.match(supportSource, /supabase\.functions\.invoke<[\s\S]*?>\(['"]send-support-message['"]/);
   assert.match(supportSource, /\?\s*\{\s*message:\s*newMessage\s*\}/);

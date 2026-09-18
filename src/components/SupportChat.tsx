@@ -33,6 +33,7 @@ export function SupportChat() {
     if (!userId) return;
 
     setMessagesLoading(true);
+    setError('');
     try {
       const { data, error: loadError } = await supabase
         .from('support_messages')
