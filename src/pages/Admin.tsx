@@ -257,46 +257,52 @@ function AdminDashboard() {
     setLoading(true);
     setError('');
 
-    const [categoriesSettled, servicesSettled, ordersSettled, messagesSettled] =
-      await Promise.allSettled([
-        supabase.from('categories').select('*').order('name'),
-        supabase.from('services').select('*').order('created_at', { ascending: false }),
-        getAdminOrdersQuery(),
-        supabase.from('support_messages').select('*').order('created_at', { ascending: false }),
-      ]);
+    try {
+      const [categoriesSettled, servicesSettled, ordersSettled, messagesSettled] =
+        await Promise.allSettled([
+          supabase.from('categories').select('*').order('name'),
+          supabase.from('services').select('*').order('created_at', { ascending: false }),
+          getAdminOrdersQuery(),
+          supabase.from('support_messages').select('*').order('created_at', { ascending: false }),
+        ]);
 
-    const categoriesResult = categoriesSettled.status === 'fulfilled' ? categoriesSettled.value : null;
-    const servicesResult = servicesSettled.status === 'fulfilled' ? servicesSettled.value : null;
-    const ordersResult = ordersSettled.status === 'fulfilled' ? ordersSettled.value : null;
-    const messagesResult = messagesSettled.status === 'fulfilled' ? messagesSettled.value : null;
+      const categoriesResult = categoriesSettled.status === 'fulfilled' ? categoriesSettled.value : null;
+      const servicesResult = servicesSettled.status === 'fulfilled' ? servicesSettled.value : null;
+      const ordersResult = ordersSettled.status === 'fulfilled' ? ordersSettled.value : null;
+      const messagesResult = messagesSettled.status === 'fulfilled' ? messagesSettled.value : null;
 
-    const errors: string[] = [];
-    if (!categoriesResult || categoriesResult.error) errors.push('categorías');
-    if (!servicesResult || servicesResult.error) errors.push('servicios');
-    if (!ordersResult || ordersResult.error) errors.push('órdenes');
-    if (!messagesResult || messagesResult.error) {
-      errors.push('mensajes');
-      console.error('No se pudieron cargar los mensajes:', messagesResult?.error);
+      const errors: string[] = [];
+      if (!categoriesResult || categoriesResult.error) errors.push('categorías');
+      if (!servicesResult || servicesResult.error) errors.push('servicios');
+      if (!ordersResult || ordersResult.error) errors.push('órdenes');
+      if (!messagesResult || messagesResult.error) {
+        errors.push('mensajes');
+        console.error('No se pudieron cargar los mensajes:', messagesResult?.error);
+      }
+
+      if (errors.length > 0) {
+        setError(`No se pudieron cargar: ${errors.join(', ')}. Recarga el panel.`);
+      }
+
+      setCategories(categoriesResult?.data ?? []);
+      setServices(servicesResult?.data ?? []);
+      setOrders(ordersResult?.data ?? []);
+      setMessages(messagesResult?.data ?? []);
+      setNewService((current) => ({
+        ...current,
+        categoryId: current.categoryId || categoriesResult?.data?.[0]?.id || '',
+      }));
+      setResponseDrafts(
+        Object.fromEntries(
+          (messagesResult?.data ?? []).map((message) => [message.id, message.admin_response ?? '']),
+        ),
+      );
+    } catch (error) {
+      console.error('No se pudo cargar el panel administrativo:', error);
+      setError('No se pudo cargar el panel administrativo. Recarga el panel.');
+    } finally {
+      setLoading(false);
     }
-
-    if (errors.length > 0) {
-      setError(`No se pudieron cargar: ${errors.join(', ')}. Recarga el panel.`);
-    }
-
-    setCategories(categoriesResult?.data ?? []);
-    setServices(servicesResult?.data ?? []);
-    setOrders(ordersResult?.data ?? []);
-    setMessages(messagesResult?.data ?? []);
-    setNewService((current) => ({
-      ...current,
-      categoryId: current.categoryId || categoriesResult?.data?.[0]?.id || '',
-    }));
-    setResponseDrafts(
-      Object.fromEntries(
-        (messagesResult?.data ?? []).map((message) => [message.id, message.admin_response ?? '']),
-      ),
-    );
-    setLoading(false);
   }, [isAdmin]);
 
   useEffect(() => {

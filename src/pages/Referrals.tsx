@@ -12,30 +12,38 @@ export function Referrals() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadReferralData = async () => {
       if (!user) return;
 
-      const { data: code } = await supabase
-        .from('referral_codes')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (code) {
-        setReferralCode(code);
-
-        const { data: uses } = await supabase
-          .from('referral_uses')
+      try {
+        const { data: code } = await supabase
+          .from('referral_codes')
           .select('*')
-          .eq('referral_code_id', code.id)
-          .order('created_at', { ascending: false });
+          .eq('user_id', user.id)
+          .maybeSingle();
 
-        if (uses) {
-          setReferralUses(uses);
+        if (cancelled) return;
+
+        if (code) {
+          setReferralCode(code);
+
+          const { data: uses } = await supabase
+            .from('referral_uses')
+            .select('*')
+            .eq('referral_code_id', code.id)
+            .order('created_at', { ascending: false });
+
+          if (!cancelled && uses) {
+            setReferralUses(uses);
+          }
         }
+      } catch (error) {
+        if (!cancelled) console.error('No se pudieron cargar los referidos:', error);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      setLoading(false);
     };
 
     if (user) {
@@ -43,6 +51,10 @@ export function Referrals() {
     } else {
       setLoading(false);
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   const handleCopyCode = () => {
