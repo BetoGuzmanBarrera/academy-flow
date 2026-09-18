@@ -62,21 +62,31 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(true);
-    const { data, error } = await supabase
-      .from('cart_items')
-      .select(`
-        id,
-        service_id,
-        quantity,
-        details,
-        service:services(*)
-      `)
-      .eq('user_id', userId);
+    try {
+      const { data, error } = await supabase
+        .from('cart_items')
+        .select(`
+          id,
+          service_id,
+          quantity,
+          details,
+          service:services(*)
+        `)
+        .eq('user_id', userId);
 
-    if (!error && data) {
-      setItems(data);
+      if (error) {
+        console.error('No se pudo cargar el carrito:', error);
+        return;
+      }
+
+      if (data) {
+        setItems(data);
+      }
+    } catch (error) {
+      console.error('No se pudo cargar el carrito:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [userId]);
 
   useEffect(() => {

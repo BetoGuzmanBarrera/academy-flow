@@ -44,43 +44,51 @@ export function AdminActivityHistory() {
     setActivityError('');
     setOrderHistoryError('');
 
-    const [activitySettled, orderHistorySettled] = await Promise.allSettled([
-      supabase
-        .from('admin_activity_log')
-        .select('id, admin_id, action, target_table, target_id, details, created_at')
-        .order('created_at', { ascending: false })
-        .limit(HISTORY_LIMIT),
-      supabase
-        .from('order_status_history')
-        .select('id, order_id, from_status, to_status, changed_by, created_at')
-        .order('created_at', { ascending: false })
-        .limit(HISTORY_LIMIT),
-    ]);
+    try {
+      const [activitySettled, orderHistorySettled] = await Promise.allSettled([
+        supabase
+          .from('admin_activity_log')
+          .select('id, admin_id, action, target_table, target_id, details, created_at')
+          .order('created_at', { ascending: false })
+          .limit(HISTORY_LIMIT),
+        supabase
+          .from('order_status_history')
+          .select('id, order_id, from_status, to_status, changed_by, created_at')
+          .order('created_at', { ascending: false })
+          .limit(HISTORY_LIMIT),
+      ]);
 
-    if (activitySettled.status === 'fulfilled' && !activitySettled.value.error) {
-      setActivityLogs(activitySettled.value.data ?? []);
-    } else {
+      if (activitySettled.status === 'fulfilled' && !activitySettled.value.error) {
+        setActivityLogs(activitySettled.value.data ?? []);
+      } else {
+        setActivityLogs([]);
+        console.error(
+          'No se pudo cargar la actividad administrativa:',
+          activitySettled.status === 'fulfilled' ? activitySettled.value.error : activitySettled.reason,
+        );
+        setActivityError('No se pudo cargar la actividad administrativa. Verifica tu sesión AAL2 e inténtalo de nuevo.');
+      }
+
+      if (orderHistorySettled.status === 'fulfilled' && !orderHistorySettled.value.error) {
+        setOrderHistory(orderHistorySettled.value.data ?? []);
+      } else {
+        setOrderHistory([]);
+        console.error(
+          'No se pudo cargar el historial de órdenes:',
+          orderHistorySettled.status === 'fulfilled' ? orderHistorySettled.value.error : orderHistorySettled.reason,
+        );
+        setOrderHistoryError('No se pudo cargar el historial de órdenes. Verifica tu sesión AAL2 e inténtalo de nuevo.');
+      }
+    } catch (error) {
       setActivityLogs([]);
-      console.error(
-        'No se pudo cargar la actividad administrativa:',
-        activitySettled.status === 'fulfilled' ? activitySettled.value.error : activitySettled.reason,
-      );
-      setActivityError('No se pudo cargar la actividad administrativa. Verifica tu sesión AAL2 e inténtalo de nuevo.');
-    }
-
-    if (orderHistorySettled.status === 'fulfilled' && !orderHistorySettled.value.error) {
-      setOrderHistory(orderHistorySettled.value.data ?? []);
-    } else {
       setOrderHistory([]);
-      console.error(
-        'No se pudo cargar el historial de órdenes:',
-        orderHistorySettled.status === 'fulfilled' ? orderHistorySettled.value.error : orderHistorySettled.reason,
-      );
+      console.error('No se pudo cargar el historial administrativo:', error);
+      setActivityError('No se pudo cargar la actividad administrativa. Verifica tu sesión AAL2 e inténtalo de nuevo.');
       setOrderHistoryError('No se pudo cargar el historial de órdenes. Verifica tu sesión AAL2 e inténtalo de nuevo.');
+    } finally {
+      setLoaded(true);
+      setLoading(false);
     }
-
-    setLoaded(true);
-    setLoading(false);
   }, []);
 
   const filteredActivity = useMemo(

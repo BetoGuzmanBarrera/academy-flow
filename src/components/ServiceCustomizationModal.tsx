@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, ShoppingCart, CreditCard as Edit3 } from 'lucide-react';
+import { ShoppingCart, CreditCard as Edit3 } from 'lucide-react';
 import type { Service, Category, Json } from '../lib/database.types';
+import { Modal } from './ui';
 import {
   getServiceFields,
   getQuantityLimits,
@@ -79,42 +80,64 @@ export function ServiceCustomizationModal({
   const totalPrice = unitPrice * quantity;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b sticky top-0 bg-white rounded-t-2xl z-10">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">{service.name}</h2>
-            <p className="text-sm text-gray-500">{category.name}</p>
-          </div>
+    <Modal
+      open
+      onClose={onClose}
+      title={service.name}
+      dismissible={!submitting}
+      className="max-w-lg"
+      footer={(
+        <>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition"
             disabled={submitting}
+            className="min-h-touch flex-1 rounded-lg border border-gray-300 px-4 py-2.5 font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
           >
-            <X size={22} />
+            Cancelar
           </button>
-        </div>
-
-        <div className="p-5 space-y-4">
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={submitting}
+            className="flex min-h-touch flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+          >
+            {mode === 'edit' ? (
+              <>
+                <Edit3 size={18} aria-hidden="true" />
+                {submitting ? 'Guardando…' : 'Guardar cambios'}
+              </>
+            ) : (
+              <>
+                <ShoppingCart size={18} aria-hidden="true" />
+                {submitting ? 'Agregando…' : 'Agregar al carrito'}
+              </>
+            )}
+          </button>
+        </>
+      )}
+    >
+      <div className="space-y-4">
+          <p className="text-sm text-gray-500">{category.name}</p>
           {service.description && (
             <p className="text-sm text-gray-600">{service.description}</p>
           )}
 
           {fields.map((field) => {
             const value = details[field.key] ?? '';
+            const fieldId = `service-customization-${field.key}`;
 
             if (field.type === 'textarea') {
               return (
                 <div key={field.key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor={fieldId} className="block text-sm font-medium text-gray-700 mb-1">
                     {field.label}
                     {!field.required && (
                       <span className="text-gray-400 font-normal ml-1">(opcional)</span>
                     )}
                   </label>
                   <textarea
+                    id={fieldId}
                     value={value}
                     onChange={(e) => handleFieldChange(field.key, e.target.value)}
                     placeholder={field.placeholder}
@@ -135,13 +158,14 @@ export function ServiceCustomizationModal({
             if (field.type === 'select') {
               return (
                 <div key={field.key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor={fieldId} className="block text-sm font-medium text-gray-700 mb-1">
                     {field.label}
                     {!field.required && (
                       <span className="text-gray-400 font-normal ml-1">(opcional)</span>
                     )}
                   </label>
                   <select
+                    id={fieldId}
                     value={value}
                     onChange={(e) => handleFieldChange(field.key, e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
@@ -160,13 +184,14 @@ export function ServiceCustomizationModal({
 
             return (
               <div key={field.key}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor={fieldId} className="block text-sm font-medium text-gray-700 mb-1">
                   {field.label}
                   {!field.required && (
                     <span className="text-gray-400 font-normal ml-1">(opcional)</span>
                   )}
                 </label>
                 <input
+                  id={fieldId}
                   type="text"
                   value={value}
                   onChange={(e) => handleFieldChange(field.key, e.target.value)}
@@ -180,30 +205,32 @@ export function ServiceCustomizationModal({
           })}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <p id="service-customization-quantity-label" className="block text-sm font-medium text-gray-700 mb-2">
               Cantidad
-            </label>
+            </p>
             {limits.fixed ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" aria-labelledby="service-customization-quantity-label">
                 <span className="px-4 py-2 bg-gray-100 rounded-lg text-sm font-medium text-gray-600">
                   1 (cantidad fija)
                 </span>
               </div>
             ) : (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3" role="group" aria-labelledby="service-customization-quantity-label">
                 <button
                   type="button"
                   onClick={() => handleQuantityChange(-1)}
-                  className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                  aria-label="Disminuir cantidad"
+                  className="flex min-h-touch min-w-touch items-center justify-center rounded-lg border border-gray-300 bg-white p-2 transition hover:bg-gray-50"
                   disabled={submitting || quantity <= limits.min}
                 >
                   <span className="text-lg leading-none">−</span>
                 </button>
-                <span className="w-16 text-center font-semibold text-lg">{quantity}</span>
+                <span className="w-16 text-center font-semibold text-lg" aria-live="polite">{quantity}</span>
                 <button
                   type="button"
                   onClick={() => handleQuantityChange(1)}
-                  className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                  aria-label="Aumentar cantidad"
+                  className="flex min-h-touch min-w-touch items-center justify-center rounded-lg border border-gray-300 bg-white p-2 transition hover:bg-gray-50"
                   disabled={submitting || (limits.max !== null && quantity >= limits.max)}
                 >
                   <span className="text-lg leading-none">+</span>
@@ -216,9 +243,9 @@ export function ServiceCustomizationModal({
           </div>
 
           {errors.length > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1">
-              {errors.map((err, i) => (
-                <p key={i} className="text-sm text-red-700">{err}</p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1" role="alert">
+              {errors.map((err) => (
+                <p key={err} className="text-sm text-red-700">{err}</p>
               ))}
             </div>
           )}
@@ -231,35 +258,7 @@ export function ServiceCustomizationModal({
               </span>
             </div>
           </div>
-        </div>
-
-        <div className="flex gap-3 p-5 border-t sticky bottom-0 bg-white rounded-b-2xl">
-          <button
-            onClick={onClose}
-            disabled={submitting}
-            className="flex-1 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {mode === 'edit' ? (
-              <>
-                <Edit3 size={18} />
-                {submitting ? 'Guardando…' : 'Guardar cambios'}
-              </>
-            ) : (
-              <>
-                <ShoppingCart size={18} />
-                {submitting ? 'Agregando…' : 'Agregar al carrito'}
-              </>
-            )}
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
