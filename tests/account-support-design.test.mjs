@@ -6,6 +6,7 @@ const readSource = (path) => readFileSync(new URL('../' + path, import.meta.url)
 const accountSource = readSource('src/pages/Account.tsx');
 const appSource = readSource('src/App.tsx');
 const headerSource = readSource('src/components/Header.tsx');
+const headerNavigationSource = readSource('src/components/header/HeaderNavigation.tsx');
 const supportSource = readSource('src/components/SupportChat.tsx');
 
 test('Account exists and uses only the existing authenticated profile data', () => {
@@ -35,13 +36,15 @@ test('App registers Account in the existing page navigation without a router', (
 });
 
 test('Header exposes Mi cuenta in authenticated desktop and mobile navigation', () => {
-  const accountNavigationTargets = [...headerSource.matchAll(/navigate\(['"]account['"]\)/g)];
+  assert.match(headerSource, /<DesktopUserNavigation/);
+  assert.match(headerSource, /<MobileNavigation/);
+  const accountNavigationTargets = [...headerNavigationSource.matchAll(/onNavigate\(['"]account['"]\)/g)];
   assert.equal(accountNavigationTargets.length, 2);
-  assert.ok((headerSource.match(/Mi cuenta/g) ?? []).length >= 2);
-  assert.match(headerSource, /Referidos/);
-  assert.match(headerSource, /Administración/);
-  assert.match(headerSource, /Cambiar contraseña/);
-  assert.match(headerSource, /Cerrar sesión/);
+  assert.ok((headerNavigationSource.match(/Mi cuenta/g) ?? []).length >= 2);
+  assert.match(headerNavigationSource, /Referidos/);
+  assert.match(headerNavigationSource, /Administración/);
+  assert.match(headerNavigationSource, /Cambiar contraseña/);
+  assert.match(headerNavigationSource, /Cerrar sesión/);
 });
 
 test('SupportChat preserves its event and authenticated message query', () => {

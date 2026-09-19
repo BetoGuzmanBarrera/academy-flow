@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Boxes,
-  CheckCircle2,
   CircleDollarSign,
   Eye,
   EyeOff,
@@ -25,6 +24,15 @@ import { AdminActivityHistory } from '../components/AdminActivityHistory';
 import { AdminReferralMetrics } from '../components/AdminReferralMetrics';
 import { AdminShell } from '../components/admin/AdminShell';
 import type { AdminSectionId } from '../components/admin/AdminShell';
+import {
+  AuditOutcomeBadge,
+  CenteredLoader,
+  CredentialLifecycleBadge,
+  PaymentBadge,
+  StatusBadge,
+  SupportStatusBadge,
+  SystemLine,
+} from '../components/admin/AdminPresentation';
 import { ServiceDetails } from '../components/ServiceDetails';
 import {
   Alert,
@@ -88,7 +96,6 @@ import type {
   AdminCredentialFilters,
   AdminCredentialMetadata,
   CredentialAccessLogEntry,
-  CredentialLifecycleState,
 } from '../lib/adminCredentialAudit';
 import type { Category, Json, Order, Service, SupportMessage } from '../lib/database.types';
 
@@ -2090,14 +2097,6 @@ function getOrderServiceSummary(order: AdminOrder): string {
   return serviceNames?.length ? serviceNames.join(', ') : 'Sin servicios identificados';
 }
 
-function CenteredLoader() {
-  return (
-    <div className="flex min-h-64 items-center justify-center" role="status" aria-label="Cargando panel administrativo">
-      <Loader2 className="h-10 w-10 animate-spin text-academy-primary" aria-hidden="true" />
-    </div>
-  );
-}
-
 function shortId(value: string | null): string {
   if (!value) return '—';
   return value.length > 8 ? `${value.slice(0, 8)}…` : value;
@@ -2107,92 +2106,6 @@ function formatAdminDate(value: string | null): string {
   if (!value) return 'Sin fecha';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'Fecha inválida' : date.toLocaleString('es-MX');
-}
-
-function CredentialLifecycleBadge({ state }: { state: CredentialLifecycleState }) {
-  const variants: Record<CredentialLifecycleState, 'success' | 'warning' | 'danger' | 'neutral'> = {
-    available: 'success',
-    expiring_soon: 'warning',
-    expired: 'warning',
-    deleted: 'danger',
-    unavailable: 'neutral',
-  };
-  const labels: Record<CredentialLifecycleState, string> = {
-    available: 'Vigente',
-    expiring_soon: 'Próxima a expirar',
-    expired: 'Expirada',
-    deleted: 'Eliminada',
-    unavailable: 'No disponible',
-  };
-
-  return <Badge variant={variants[state]}>{labels[state]}</Badge>;
-}
-
-function AuditOutcomeBadge({ success }: { success: boolean }) {
-  return <Badge variant={success ? 'success' : 'danger'}>{success ? 'Éxito' : 'Fallo'}</Badge>;
-}
-
-function StatusBadge({ status }: { status: Order['status'] }) {
-  const variants: Record<Order['status'], 'warning' | 'primary' | 'success' | 'danger'> = {
-    pending: 'warning',
-    in_progress: 'primary',
-    completed: 'success',
-    cancelled: 'danger',
-  };
-
-  const labels: Record<Order['status'], string> = {
-    pending: 'Pendiente',
-    in_progress: 'En proceso',
-    completed: 'Completada',
-    cancelled: 'Cancelada',
-  };
-
-  return (
-    <Badge variant={variants[status]} aria-label={`Estado de orden: ${labels[status]}`}>
-      {labels[status]}
-    </Badge>
-  );
-}
-
-function PaymentBadge({ status }: { status: Order['payment_status'] }) {
-  const variants: Record<Order['payment_status'], 'success' | 'warning' | 'danger' | 'neutral'> = {
-    paid: 'success',
-    pending: 'warning',
-    failed: 'danger',
-    refunded: 'neutral',
-  };
-
-  const labels: Record<Order['payment_status'], string> = {
-    paid: 'Pagado',
-    pending: 'Pendiente',
-    failed: 'Fallido',
-    refunded: 'Reembolsado',
-  };
-
-  return (
-    <Badge variant={variants[status]} aria-label={`Estado de pago: ${labels[status]}`}>
-      {labels[status]}
-    </Badge>
-  );
-}
-
-function SupportStatusBadge({ status }: { status: SupportMessage['status'] }) {
-  const variants: Record<SupportMessage['status'], 'warning' | 'primary' | 'success'> = {
-    pending: 'warning',
-    in_progress: 'primary',
-    resolved: 'success',
-  };
-  const labels: Record<SupportMessage['status'], string> = {
-    pending: 'Pendiente',
-    in_progress: 'En proceso',
-    resolved: 'Resuelto',
-  };
-
-  return (
-    <Badge variant={variants[status]} aria-label={`Estado de soporte: ${labels[status]}`}>
-      {labels[status]}
-    </Badge>
-  );
 }
 
 function getOrderTransitions(currentStatus: Order['status']): { value: Order['status']; label: string }[] {
@@ -2216,13 +2129,4 @@ function getOrderTransitions(currentStatus: Order['status']): { value: Order['st
     default:
       return [];
   }
-}
-
-function SystemLine({ ok = false, label }: { ok?: boolean; label: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      {ok ? <CheckCircle2 size={18} className="text-green-600" aria-hidden="true" /> : <ShieldAlert size={18} className="text-yellow-600" aria-hidden="true" />}
-      <span>{label}</span>
-    </div>
-  );
 }
