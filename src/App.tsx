@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import { Header } from './components/Header';
@@ -8,17 +8,24 @@ import { AuthModal } from './components/AuthModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { SupportChat } from './components/SupportChat';
 import { Home } from './pages/Home';
-import { Catalog } from './pages/Catalog';
 import { About } from './pages/About';
 import { Vision } from './pages/Vision';
 import { Mission } from './pages/Mission';
-import { Orders } from './pages/Orders';
-import { Checkout } from './pages/Checkout';
-import { Referrals } from './pages/Referrals';
 import { Policies } from './pages/Policies';
-import { ResetPassword } from './pages/ResetPassword';
-import { Admin } from './pages/Admin';
-import { Account } from './pages/Account';
+
+const Catalog = lazy(() => import('./pages/Catalog').then(({ Catalog }) => ({ default: Catalog })));
+const Orders = lazy(() => import('./pages/Orders').then(({ Orders }) => ({ default: Orders })));
+const Checkout = lazy(() => import('./pages/Checkout').then(({ Checkout }) => ({ default: Checkout })));
+const Referrals = lazy(() => import('./pages/Referrals').then(({ Referrals }) => ({ default: Referrals })));
+const ResetPassword = lazy(() => import('./pages/ResetPassword').then(({ ResetPassword }) => ({ default: ResetPassword })));
+const Admin = lazy(() => import('./pages/Admin').then(({ Admin }) => ({ default: Admin })));
+const Account = lazy(() => import('./pages/Account').then(({ Account }) => ({ default: Account })));
+
+const pageFallback = (
+  <div role="status" aria-live="polite" className="flex min-h-[50vh] items-center justify-center text-academy-text-muted">
+    Cargando página...
+  </div>
+);
 
 export type Page = 'home' | 'catalog' | 'about' | 'vision' | 'mission' | 'orders' | 'checkout' | 'referrals' | 'policies' | 'admin' | 'account';
 
@@ -80,7 +87,9 @@ function App() {
   if (isResetPassword) {
     return (
       <AuthProvider>
-        <ResetPassword onComplete={handleResetPasswordComplete} />
+        <Suspense fallback={pageFallback}>
+          <ResetPassword onComplete={handleResetPasswordComplete} />
+        </Suspense>
       </AuthProvider>
     );
   }
@@ -140,7 +149,9 @@ function App() {
           )}
 
           <main className="flex-1">
-            {renderPage()}
+            <Suspense fallback={pageFallback}>
+              {renderPage()}
+            </Suspense>
           </main>
 
           {currentPage !== 'admin' && (
