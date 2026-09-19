@@ -9,9 +9,11 @@ const mfaGateSource = readSource('src/components/AdminMfaGate.tsx');
 const activitySource = readSource('src/components/AdminActivityHistory.tsx');
 const referralSource = readSource('src/components/AdminReferralMetrics.tsx');
 const modalSource = readSource('src/components/ui/Modal.tsx');
+const adminShellSource = readSource('src/components/admin/AdminShell.tsx');
+const appSource = readSource('src/App.tsx');
 
 test('Admin remains protected by the MFA and AAL2 gate', () => {
-  assert.match(adminSource, /<AdminMfaGate[\s\S]*?<AdminDashboard\s*\/>[\s\S]*?<\/AdminMfaGate>/);
+  assert.match(adminSource, /<AdminMfaGate[\s\S]*?<AdminDashboard\s+onNavigate=\{onNavigate\}\s*\/>[\s\S]*?<\/AdminMfaGate>/);
   assert.match(mfaGateSource, /getAdminMfaGateDecision\(isAdmin,\s*status\)/);
   assert.match(mfaGateSource, /getAdminMfaStatus\(supabase\.auth\.mfa\)/);
   assert.match(mfaGateSource, /currentLevel\s*!==\s*['"]aal2['"]/);
@@ -42,12 +44,29 @@ test('Admin shell preserves all seven accessible sections', () => {
   ];
 
   for (const [id, label] of expectedTabs) {
-    assert.match(adminSource, new RegExp(`id:\\s*['"]${id}['"],\\s*label:\\s*['"]${label}['"]`));
+    assert.match(adminShellSource, new RegExp(`id:\\s*['"]${id}['"],\\s*label:\\s*['"]${label}['"]`));
   }
-  assert.match(adminSource, /role="tablist"/);
-  assert.match(adminSource, /role="tab"/);
-  assert.match(adminSource, /role="tabpanel"/);
-  assert.match(adminSource, /ArrowLeft|ArrowRight/);
+  assert.match(adminSource, /<AdminShell/);
+  assert.match(adminShellSource, /<nav aria-label="Navegación administrativa"/);
+  assert.match(adminShellSource, /aria-current=\{active \? ['"]page['"] : undefined\}/);
+  assert.doesNotMatch(adminSource, /role="tabpanel"/);
+});
+
+test('Admin uses the approved desktop sidebar and accessible mobile Drawer', () => {
+  assert.match(adminShellSource, /w-\[248px\]/);
+  assert.match(adminShellSource, /h-\[72px\]/);
+  assert.match(adminShellSource, /h-\[68px\]/);
+  assert.match(adminShellSource, /<Drawer[\s\S]*?side="left"/);
+  assert.match(adminShellSource, /aria-label="Abrir navegación administrativa"/);
+  assert.match(adminShellSource, /Volver al sitio/);
+  assert.match(adminShellSource, /Mi cuenta/);
+});
+
+test('Public site chrome does not surround the dedicated Admin shell', () => {
+  assert.match(appSource, /currentPage !== ['"]admin['"] && \([\s\S]*?<Header/);
+  assert.match(appSource, /currentPage !== ['"]admin['"] && \([\s\S]*?<Footer/);
+  assert.match(appSource, /currentPage !== ['"]admin['"] && <SupportChat/);
+  assert.match(appSource, /<Admin onNavigate=\{handleNavigate\}/);
 });
 
 test('Dashboard metrics and recent orders remain grounded in real data', () => {

@@ -106,7 +106,6 @@ export function AdminReferralMetrics() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Badge variant="primary">Solo lectura</Badge>
-          <h2 className="mt-3 text-af-h2 text-academy-text">Referidos y métricas</h2>
           <p className="mt-1 text-af-body-sm text-academy-text-muted">
             Visibilidad operativa de solo lectura protegida por admin y AAL2.
           </p>
@@ -123,17 +122,20 @@ export function AdminReferralMetrics() {
 
       {error && <Alert variant="error" role="alert">{error}</Alert>}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard icon={<Gift className="h-5 w-5" />} label="Códigos creados" value={metrics.codesTotal} />
         <StatCard icon={<TicketCheck className="h-5 w-5" />} label="Códigos utilizados" value={metrics.codesUsed} />
-        <StatCard icon={<Gift className="h-5 w-5" />} label="Códigos sin uso" value={metrics.codesUnused} />
         <StatCard icon={<Users className="h-5 w-5" />} label="Usos totales" value={metrics.usesTotal} />
-        <StatCard icon={<Users className="h-5 w-5" />} label="Clientes en muestra reciente" value={metrics.recentCustomers} />
         <StatCard
           icon={<TicketCheck className="h-5 w-5" />}
           label="Descuento en muestra reciente"
           value={`$${metrics.recentDiscount.toFixed(2)}`}
         />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Card><CardContent className="flex items-center justify-between gap-4 p-4"><span className="text-sm text-academy-text-muted">Códigos sin uso</span><strong className="text-lg text-academy-text">{metrics.codesUnused}</strong></CardContent></Card>
+        <Card><CardContent className="flex items-center justify-between gap-4 p-4"><span className="text-sm text-academy-text-muted">Clientes en muestra reciente</span><strong className="text-lg text-academy-text">{metrics.recentCustomers}</strong></CardContent></Card>
       </div>
 
       <Alert variant="info">
@@ -188,7 +190,8 @@ export function AdminReferralMetrics() {
       ) : filteredCodes.length === 0 ? (
         <EmptyState icon={<Gift className="h-8 w-8" />} title="Sin coincidencias" description="No hay códigos que coincidan con los filtros." />
       ) : (
-        <div className="overflow-x-auto rounded-xl border bg-white">
+        <>
+        <div className="hidden overflow-x-auto rounded-af-lg border border-academy-border bg-white shadow-af-card lg:block">
           <table className="w-full min-w-[980px] text-sm">
             <thead className="bg-gray-50 text-left">
               <tr>
@@ -239,6 +242,31 @@ export function AdminReferralMetrics() {
             </tbody>
           </table>
         </div>
+        <div className="space-y-3 lg:hidden">
+          {filteredCodes.map((code) => {
+            const codeUses = getRecentUsesForCode(code.id, recentUses);
+            const recentDiscount = codeUses.reduce((total, use) => total + Number(use.discount_amount), 0);
+            return (
+              <Card key={code.id}>
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-mono font-bold text-academy-primary">{code.code}</p>
+                      <p className="mt-1 font-mono text-xs text-academy-text-muted">{shortId(code.user_id)}</p>
+                    </div>
+                    <Badge variant={(code.uses_count ?? 0) > 0 ? 'success' : 'neutral'}>{(code.uses_count ?? 0) > 0 ? 'Con usos' : 'Sin uso'}</Badge>
+                  </div>
+                  <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-academy-border pt-4 text-sm">
+                    <div><dt className="text-xs text-academy-text-muted">Usos totales</dt><dd className="mt-1 font-bold">{code.uses_count ?? 0}</dd></div>
+                    <div><dt className="text-xs text-academy-text-muted">Descuento reciente</dt><dd className="mt-1 font-bold text-green-700">${recentDiscount.toFixed(2)}</dd></div>
+                    <div className="col-span-2"><dt className="text-xs text-academy-text-muted">Creado</dt><dd className="mt-1 text-xs">{formatDate(code.created_at)}</dd></div>
+                  </dl>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+        </>
       )}
     </div>
   );

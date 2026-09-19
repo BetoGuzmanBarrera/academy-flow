@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BarChart3,
   Boxes,
   CheckCircle2,
   CircleDollarSign,
   Eye,
   EyeOff,
-  Gift,
   History,
   KeyRound,
   Loader2,
@@ -25,6 +23,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { AdminMfaGate } from '../components/AdminMfaGate';
 import { AdminActivityHistory } from '../components/AdminActivityHistory';
 import { AdminReferralMetrics } from '../components/AdminReferralMetrics';
+import { AdminShell } from '../components/admin/AdminShell';
+import type { AdminSectionId } from '../components/admin/AdminShell';
 import { ServiceDetails } from '../components/ServiceDetails';
 import {
   Alert,
@@ -106,7 +106,27 @@ const getAdminOrdersQuery = () =>
 
 type AdminOrder = QueryData<ReturnType<typeof getAdminOrdersQuery>>[number];
 
-type AdminTab = 'dashboard' | 'services' | 'orders' | 'support' | 'credentials' | 'activity' | 'referrals';
+type AdminTab = AdminSectionId;
+
+const adminSectionTitles: Record<AdminTab, string> = {
+  dashboard: 'Panel de administración',
+  services: 'Servicios',
+  orders: 'Órdenes',
+  support: 'Soporte',
+  credentials: 'Credenciales',
+  activity: 'Actividad y trazabilidad',
+  referrals: 'Referidos y métricas',
+};
+
+const adminSectionDescriptions: Record<AdminTab, string> = {
+  dashboard: 'Supervisa la operación diaria de Academy Flow desde un solo lugar.',
+  services: 'Administra categorías, disponibilidad y precios del catálogo.',
+  orders: 'Consulta pagos, servicios y transiciones operativas seguras.',
+  support: 'Consulta mensajes, responde y actualiza su estado operativo.',
+  credentials: 'Gestiona el inventario cifrado y su auditoría de accesos.',
+  activity: 'Consulta la actividad administrativa y el historial de órdenes.',
+  referrals: 'Revisa el uso de códigos y las métricas operativas de referidos.',
+};
 
 type RevealedCredential = {
   credentialId: string;
@@ -196,7 +216,11 @@ const emptyService: AdminServiceDraft = {
   isActive: true,
 };
 
-export function Admin() {
+interface AdminProps {
+  onNavigate: (page: 'home' | 'account') => void;
+}
+
+export function Admin({ onNavigate }: AdminProps) {
   const { user, isAdmin, loading: authLoading } = useAuth();
 
   return (
@@ -206,12 +230,12 @@ export function Admin() {
       isAdmin={isAdmin}
       userId={user?.id ?? null}
     >
-      <AdminDashboard />
+      <AdminDashboard onNavigate={onNavigate} />
     </AdminMfaGate>
   );
 }
 
-function AdminDashboard() {
+function AdminDashboard({ onNavigate }: AdminProps) {
   const { user, isAdmin } = useAuth();
   const [tab, setTab] = useState<AdminTab>('dashboard');
   const [categories, setCategories] = useState<Category[]>([]);
@@ -245,11 +269,16 @@ function AdminDashboard() {
   const [cancellationError, setCancellationError] = useState('');
   const [orderFilters, setOrderFilters] = useState<AdminOrderFilters>(emptyAdminOrderFilters);
   const [supportFilters, setSupportFilters] = useState<AdminSupportFilters>(emptyAdminSupportFilters);
+  const [catalogPanel, setCatalogPanel] = useState<'none' | 'category' | 'service'>('none');
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [serviceCategoryFilter, setServiceCategoryFilter] = useState('all');
+  const [serviceStatusFilter, setServiceStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [credentialView, setCredentialView] = useState<'inventory' | 'audit'>('inventory');
+  const [selectedSupportId, setSelectedSupportId] = useState<string | null>(null);
   const cancellationLock = useRef(false);
   const catalogMutationLock = useRef(false);
   const revealLock = useRef(false);
   const revealTimeout = useRef<number | null>(null);
-  const tabButtons = useRef<Array<HTMLButtonElement | null>>([]);
 
   const loadData = useCallback(async () => {
     if (!isAdmin) return;
@@ -344,6 +373,23 @@ function AdminDashboard() {
     [messages, supportFilters],
   );
   const supportFiltersActive = hasActiveAdminSupportFilters(supportFilters);
+  const filteredServices = useMemo(() => {
+    const normalizedSearch = serviceSearch.trim().toLocaleLowerCase('es-MX');
+    return services.filter((service) => {
+      const matchesSearch = !normalizedSearch
+        || service.name.toLocaleLowerCase('es-MX').includes(normalizedSearch)
+        || (service.description ?? '').toLocaleLowerCase('es-MX').includes(normalizedSearch);
+      const matchesCategory = serviceCategoryFilter === 'all' || service.category_id === serviceCategoryFilter;
+      const matchesStatus = serviceStatusFilter === 'all'
+        || (serviceStatusFilter === 'active' ? service.is_active : !service.is_active);
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
+  }, [serviceCategoryFilter, serviceSearch, serviceStatusFilter, services]);
+  const recentOrders = orders.slice(0, 5);
+  const pendingSupportMessages = messages.filter((message) => message.status !== 'resolved').slice(0, 3);
+  const selectedSupportMessage = filteredMessages.find((message) => message.id === selectedSupportId)
+    ?? filteredMessages[0]
+    ?? null;
   const credentialRowsWithOrderStatus = useMemo(() => {
     const statusByOrderId = new Map(orders.map((order) => [order.id, order.status]));
     return credentialRows.map((credential) => ({
@@ -777,77 +823,34 @@ function AdminDashboard() {
     setSavingId(null);
   };
 
-  const tabs: { id: AdminTab; label: string; icon: typeof BarChart3 }[] = [
-    { id: 'dashboard', label: 'Resumen', icon: BarChart3 },
-    { id: 'services', label: 'Servicios', icon: Boxes },
-    { id: 'orders', label: 'Órdenes', icon: PackageCheck },
-    { id: 'support', label: 'Soporte', icon: MessageSquare },
-    { id: 'credentials', label: 'Credenciales', icon: KeyRound },
-    { id: 'activity', label: 'Actividad', icon: History },
-    { id: 'referrals', label: 'Referidos', icon: Gift },
-  ];
-
-  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-
-    event.preventDefault();
-    let nextIndex = index;
-    if (event.key === 'Home') nextIndex = 0;
-    if (event.key === 'End') nextIndex = tabs.length - 1;
-    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
-    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
-
-    setTab(tabs[nextIndex].id);
-    tabButtons.current[nextIndex]?.focus();
-  };
-
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      <div className="mb-8 flex flex-col gap-5 rounded-af-lg border border-academy-border bg-gradient-to-br from-white to-blue-50/70 p-5 shadow-af-card sm:flex-row sm:items-start sm:justify-between sm:p-7">
-        <div>
-          <Badge variant="primary">ADMINISTRACIÓN</Badge>
-          <h1 className="mt-4 text-af-h1 text-academy-text">Panel de Academy Flow</h1>
-          <p className="mt-2 max-w-2xl text-academy-text-muted">
-            Gestiona catálogo, órdenes, soporte y operaciones desde un solo lugar.
-          </p>
-        </div>
-        <Button
-          variant="secondary"
-          onClick={() => void loadData()}
-          loading={loading}
-          leadingIcon={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
-          className="w-full sm:w-auto"
-        >
-          Actualizar
-        </Button>
-      </div>
-
-      <div className="mb-8 overflow-x-auto border-b border-academy-border" role="tablist" aria-label="Secciones administrativas">
-        <div className="flex min-w-max gap-1">
-        {tabs.map(({ id, label, icon: Icon }, index) => (
-          <button
-            key={id}
-            ref={(element) => { tabButtons.current[index] = element; }}
-            id={`admin-tab-${id}`}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            aria-controls={`admin-panel-${id}`}
-            tabIndex={tab === id ? 0 : -1}
-            onClick={() => setTab(id)}
-            onKeyDown={(event) => handleTabKeyDown(event, index)}
-            className={`flex min-h-touch items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-academy-primary ${
-              tab === id
-                ? 'border-academy-primary text-academy-primary'
-                : 'border-transparent text-academy-text-muted hover:text-academy-text'
-            }`}
+    <AdminShell
+      activeSection={tab}
+      adminEmail={user?.email}
+      onBackToSite={() => onNavigate('home')}
+      onOpenAccount={() => onNavigate('account')}
+      onSectionChange={setTab}
+    >
+      <div className="mx-auto w-full max-w-[1128px]">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-[30px] font-bold leading-[1.15] text-academy-text lg:text-[32px]">
+              {adminSectionTitles[tab]}
+            </h1>
+            <p className="mt-2 max-w-2xl text-[15px] text-academy-text-muted">
+              {adminSectionDescriptions[tab]}
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() => void loadData()}
+            loading={loading}
+            leadingIcon={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
+            className="w-full sm:w-auto"
           >
-            <Icon className="h-4 w-4" aria-hidden="true" />
-            {label}
-          </button>
-        ))}
+            Actualizar
+          </Button>
         </div>
-      </div>
 
       {error && (
         <Alert className="mb-6" variant="error" role="alert" title="No se pudo completar la operación">
@@ -862,167 +865,248 @@ function AdminDashboard() {
         <Alert className="mb-6" variant="success" role="status">{notice}</Alert>
       )}
 
-      <div
-        id={`admin-panel-${tab}`}
-        role="tabpanel"
-        aria-labelledby={`admin-tab-${tab}`}
-        tabIndex={0}
-        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"
+      <section
+        id={`admin-section-${tab}`}
+        aria-label={`Sección administrativa: ${tab}`}
+        className="min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"
       >
       {loading ? (
         <CenteredLoader />
       ) : (
         <>
           {tab === 'dashboard' && (
-            <div className="space-y-8">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
                 <StatCard icon={<CircleDollarSign className="h-5 w-5" />} label="Ingresos confirmados" value={`$${metrics.revenue.toFixed(2)}`} />
                 <StatCard icon={<PackageCheck className="h-5 w-5" />} label="Órdenes" value={String(metrics.orders)} />
                 <StatCard icon={<Loader2 className="h-5 w-5" />} label="Pendientes" value={String(metrics.pendingOrders)} />
                 <StatCard icon={<Boxes className="h-5 w-5" />} label="Servicios activos" value={String(metrics.activeServices)} />
-                <StatCard icon={<MessageSquare className="h-5 w-5" />} label="Soporte pendiente" value={String(metrics.pendingSupport)} />
+                <div className="col-span-2 lg:col-span-1">
+                  <StatCard icon={<MessageSquare className="h-5 w-5" />} label="Soporte pendiente" value={String(metrics.pendingSupport)} />
+                </div>
               </div>
 
-              <div className="grid gap-6 lg:grid-cols-2">
+              <Card>
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-academy-text">Órdenes recientes</h2>
+                    <p className="mt-1 text-af-body-sm text-academy-text-muted">Las cinco órdenes más recientes.</p>
+                  </div>
+                  <Button variant="secondary" onClick={() => setTab('orders')}>Ver todas las órdenes</Button>
+                </CardHeader>
+                {recentOrders.length === 0 ? (
+                  <CardContent>
+                    <EmptyState title="Sin órdenes recientes" description="Las órdenes aparecerán aquí cuando estén disponibles." />
+                  </CardContent>
+                ) : (
+                  <>
+                    <div className="hidden overflow-x-auto lg:block">
+                      <table className="w-full min-w-[900px] text-sm">
+                        <thead className="bg-academy-subtle text-left text-xs font-semibold uppercase tracking-wide text-academy-text-muted">
+                          <tr>
+                            <th className="px-5 py-3">Orden</th>
+                            <th className="px-5 py-3">Cliente</th>
+                            <th className="px-5 py-3">Servicio</th>
+                            <th className="px-5 py-3">Total</th>
+                            <th className="px-5 py-3">Pago</th>
+                            <th className="px-5 py-3">Estado</th>
+                            <th className="px-5 py-3">Fecha</th>
+                            <th className="px-5 py-3">Acción</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recentOrders.map((order) => (
+                            <tr key={order.id} className="border-t border-academy-border align-middle">
+                              <td className="px-5 py-4 font-mono text-xs">#{order.id.slice(0, 8)}</td>
+                              <td className="px-5 py-4 font-mono text-xs text-academy-text-muted">{shortId(order.user_id)}</td>
+                              <td className="max-w-60 px-5 py-4 font-medium">{getOrderServiceSummary(order)}</td>
+                              <td className="px-5 py-4 font-semibold">${Number(order.total_amount).toFixed(2)}</td>
+                              <td className="px-5 py-4"><PaymentBadge status={order.payment_status} /></td>
+                              <td className="px-5 py-4"><StatusBadge status={order.status} /></td>
+                              <td className="px-5 py-4 text-xs text-academy-text-muted">{formatAdminDate(order.created_at)}</td>
+                              <td className="px-5 py-4"><Button size="sm" variant="ghost" onClick={() => setTab('orders')}>Ver</Button></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <CardContent className="space-y-3 lg:hidden">
+                      {recentOrders.map((order) => (
+                        <article key={order.id} className="rounded-af-md border border-academy-border p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-mono text-sm font-semibold">#{order.id.slice(0, 8)}</p>
+                              <p className="mt-1 text-xs text-academy-text-muted">{formatAdminDate(order.created_at)}</p>
+                            </div>
+                            <StatusBadge status={order.status} />
+                          </div>
+                          <p className="mt-4 text-sm font-medium">{getOrderServiceSummary(order)}</p>
+                          <div className="mt-4 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2"><PaymentBadge status={order.payment_status} /><span className="font-semibold">${Number(order.total_amount).toFixed(2)}</span></div>
+                            <Button size="sm" variant="secondary" onClick={() => setTab('orders')}>Ver</Button>
+                          </div>
+                        </article>
+                      ))}
+                    </CardContent>
+                  </>
+                )}
+              </Card>
+
+              <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
                 <Card>
                   <CardHeader>
-                    <h2 className="text-af-h3 text-academy-text">Órdenes recientes</h2>
-                    <p className="mt-1 text-af-body-sm text-academy-text-muted">Las cinco órdenes más recientes.</p>
+                    <h2 className="text-lg font-bold text-academy-text">Actividad reciente</h2>
+                    <p className="mt-1 text-sm text-academy-text-muted">El historial seguro se consulta bajo demanda.</p>
+                  </CardHeader>
+                  <CardContent>
+                    <EmptyState
+                      icon={<History className="h-8 w-8" />}
+                      title="Historial protegido"
+                      description="Abre Actividad para cargar los registros administrativos y transiciones de órdenes."
+                      action={<Button variant="secondary" onClick={() => setTab('activity')}>Ver actividad</Button>}
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <h2 className="text-lg font-bold text-academy-text">Soporte pendiente</h2>
+                    <p className="mt-1 text-sm text-academy-text-muted">Solicitudes reales aún no resueltas.</p>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {orders.length === 0 && (
-                      <EmptyState title="Sin órdenes recientes" description="Las órdenes aparecerán aquí cuando estén disponibles." />
-                    )}
-                    {orders.slice(0, 5).map((order) => (
-                      <div key={order.id} className="flex items-center justify-between gap-4 border-b border-academy-border pb-3 last:border-0 last:pb-0">
-                        <div>
-                          <p className="font-mono text-sm">#{order.id.slice(0, 8)}</p>
-                          <p className="text-xs text-academy-text-muted">{new Date(order.created_at).toLocaleString('es-MX')}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold">${Number(order.total_amount).toFixed(2)}</p>
-                          <StatusBadge status={order.status} />
-                        </div>
-                      </div>
+                    {pendingSupportMessages.length === 0 ? (
+                      <p className="text-sm text-academy-text-muted">No hay mensajes pendientes.</p>
+                    ) : pendingSupportMessages.map((message) => (
+                      <button
+                        key={message.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSupportId(message.id);
+                          setTab('support');
+                        }}
+                        className="flex min-h-touch w-full items-center justify-between gap-3 rounded-af-md border border-academy-border px-3 py-2 text-left hover:bg-academy-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"
+                      >
+                        <span className="min-w-0"><span className="block truncate text-sm font-semibold">{message.user_name}</span><span className="block truncate text-xs text-academy-text-muted">{message.message}</span></span>
+                        <SupportStatusBadge status={message.status} />
+                      </button>
                     ))}
                   </CardContent>
                 </Card>
-
-                <Card>
-                  <CardHeader>
-                    <h2 className="text-af-h3 text-academy-text">Estado del sistema</h2>
-                    <p className="mt-1 text-af-body-sm text-academy-text-muted">Controles configurados en la aplicación.</p>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
-                    <SystemLine ok label="RLS y roles administrativos configurados" />
-                    <SystemLine ok label="Precios calculados dentro de PostgreSQL" />
-                    <SystemLine ok label="Órdenes creadas como pendientes" />
-                    <SystemLine ok label="Credenciales cifradas con AES-256-GCM" />
-                    <SystemLine ok label="Pagos con Stripe habilitados" />
-                  </CardContent>
-                </Card>
               </div>
+
+              <section aria-labelledby="admin-quick-actions-title">
+                <h2 id="admin-quick-actions-title" className="mb-3 text-base font-bold text-academy-text">Acciones rápidas</h2>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <Button variant="secondary" onClick={() => { setCatalogPanel('category'); setTab('services'); }}>Nueva categoría</Button>
+                  <Button variant="secondary" onClick={() => { setCatalogPanel('service'); setTab('services'); }}>Nuevo servicio</Button>
+                  <Button variant="secondary" onClick={() => setTab('orders')}>Ver órdenes</Button>
+                  <Button variant="secondary" onClick={() => setTab('support')}>Ver soporte</Button>
+                </div>
+              </section>
+
+              <Card>
+                <CardHeader>
+                  <h2 className="text-base font-bold text-academy-text">Estado del sistema</h2>
+                </CardHeader>
+                <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                  <SystemLine ok label="RLS y roles administrativos configurados" />
+                  <SystemLine ok label="Precios calculados dentro de PostgreSQL" />
+                  <SystemLine ok label="Órdenes creadas como pendientes" />
+                  <SystemLine ok label="Credenciales cifradas con AES-256-GCM" />
+                  <SystemLine ok label="Pagos con Stripe habilitados" />
+                </CardContent>
+              </Card>
             </div>
           )}
 
           {tab === 'services' && (
-            <div className="space-y-8">
-              <div>
-                <h2 className="text-af-h2 text-academy-text">Catálogo y servicios</h2>
-                <p className="mt-1 text-academy-text-muted">Administra categorías, disponibilidad y precios del catálogo.</p>
+            <div className="space-y-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <Button variant="secondary" onClick={() => setCatalogPanel((current) => current === 'category' ? 'none' : 'category')}>
+                  Nueva categoría
+                </Button>
+                <Button leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />} onClick={() => setCatalogPanel((current) => current === 'service' ? 'none' : 'service')}>
+                  Nuevo servicio
+                </Button>
               </div>
-              <div className="grid gap-6 lg:grid-cols-3">
+
+              {catalogPanel === 'category' && (
                 <Card>
                   <CardHeader>
-                    <h3 className="text-af-h3 text-academy-text">Nueva categoría</h3>
-                    <p className="mt-1 text-af-body-sm text-academy-text-muted">Organiza los servicios disponibles.</p>
+                    <h2 className="text-lg font-bold text-academy-text">Nueva categoría</h2>
+                    <p className="mt-1 text-sm text-academy-text-muted">Organiza los servicios disponibles.</p>
                   </CardHeader>
                   <CardContent>
-                    <form onSubmit={handleCreateCategory} className="space-y-4">
+                    <form onSubmit={handleCreateCategory} className="flex flex-col gap-4 sm:flex-row sm:items-end">
                       <Input
+                        className="flex-1"
                         label="Nombre de la categoría"
                         value={newCategoryName}
                         onChange={(event) => setNewCategoryName(event.target.value)}
                         placeholder="Ej. Idiomas"
                       />
-                      <Button
-                        type="submit"
-                        className="w-full"
-                        variant="secondary"
-                        loading={savingId === 'new-category'}
-                        leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
-                      >
+                      <Button type="submit" loading={savingId === 'new-category'} leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}>
                         Crear categoría
                       </Button>
                     </form>
                   </CardContent>
                 </Card>
+              )}
 
-                <Card className="lg:col-span-2">
+              {catalogPanel === 'service' && (
+                <Card>
                   <CardHeader>
-                    <h3 className="text-af-h3 text-academy-text">Nuevo servicio</h3>
-                    <p className="mt-1 text-af-body-sm text-academy-text-muted">Publica una oferta usando los datos reales del catálogo.</p>
+                    <h2 className="text-lg font-bold text-academy-text">Nuevo servicio</h2>
+                    <p className="mt-1 text-sm text-academy-text-muted">Publica una oferta usando los datos reales del catálogo.</p>
                   </CardHeader>
                   <CardContent>
                     <form onSubmit={handleCreateService} className="space-y-4">
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <Input
-                          required
-                          label="Nombre"
-                          value={newService.name}
-                          onChange={(event) => setNewService((current) => ({ ...current, name: event.target.value }))}
-                        />
-                        <Select
-                          required
-                          label="Categoría"
-                          value={newService.categoryId}
-                          onChange={(event) => setNewService((current) => ({ ...current, categoryId: event.target.value }))}
-                        >
+                        <Input required label="Nombre" value={newService.name} onChange={(event) => setNewService((current) => ({ ...current, name: event.target.value }))} />
+                        <Select required label="Categoría" value={newService.categoryId} onChange={(event) => setNewService((current) => ({ ...current, categoryId: event.target.value }))}>
                           <option value="">Selecciona categoría</option>
                           {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                         </Select>
-                        <Input
-                          required
-                          label="Precio (MXN)"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={newService.price}
-                          onChange={(event) => setNewService((current) => ({ ...current, price: event.target.value }))}
-                        />
-                        <Select
-                          label="Disponibilidad"
-                          value={newService.isActive ? 'active' : 'inactive'}
-                          onChange={(event) => setNewService((current) => ({
-                            ...current,
-                            isActive: event.target.value === 'active',
-                          }))}
-                        >
+                        <Input required label="Precio (MXN)" type="number" min="0" step="0.01" value={newService.price} onChange={(event) => setNewService((current) => ({ ...current, price: event.target.value }))} />
+                        <Select label="Disponibilidad" value={newService.isActive ? 'active' : 'inactive'} onChange={(event) => setNewService((current) => ({ ...current, isActive: event.target.value === 'active' }))}>
                           <option value="active">Activo</option>
                           <option value="inactive">Inactivo</option>
                         </Select>
                         <div className="sm:col-span-2">
-                          <Textarea
-                            label="Descripción"
-                            value={newService.description}
-                            onChange={(event) => setNewService((current) => ({ ...current, description: event.target.value }))}
-                          />
+                          <Textarea label="Descripción" value={newService.description} onChange={(event) => setNewService((current) => ({ ...current, description: event.target.value }))} />
                         </div>
                       </div>
-                      <Button
-                        type="submit"
-                        loading={savingId === 'new-service'}
-                        leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
-                      >
+                      <Button type="submit" loading={savingId === 'new-service'} leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}>
                         {savingId === 'new-service' ? 'Creando…' : 'Crear servicio'}
                       </Button>
                     </form>
                   </CardContent>
                 </Card>
-              </div>
+              )}
 
-              <div className="overflow-x-auto rounded-af-lg border border-academy-border bg-academy-surface shadow-af-card">
-                <table className="w-full min-w-[900px] text-sm">
+              <Card>
+                <CardContent>
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_minmax(180px,1fr)]">
+                    <div>
+                      <label htmlFor="admin-service-search" className="mb-1.5 block text-af-label text-academy-text">Buscar servicios</label>
+                      <SearchBar id="admin-service-search" value={serviceSearch} onChange={(event) => setServiceSearch(event.target.value)} onClear={() => setServiceSearch('')} placeholder="Nombre o descripción" />
+                    </div>
+                    <Select label="Categoría" value={serviceCategoryFilter} onChange={(event) => setServiceCategoryFilter(event.target.value)}>
+                      <option value="all">Todas</option>
+                      {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                    </Select>
+                    <Select label="Estado" value={serviceStatusFilter} onChange={(event) => setServiceStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}>
+                      <option value="all">Todos</option>
+                      <option value="active">Activos</option>
+                      <option value="inactive">Inactivos</option>
+                    </Select>
+                  </div>
+                  <p className="mt-3 text-sm text-academy-text-muted" aria-live="polite">Mostrando {filteredServices.length} de {services.length} servicios</p>
+                </CardContent>
+              </Card>
+
+              <div className="hidden overflow-x-auto rounded-af-lg border border-academy-border bg-academy-surface shadow-af-card lg:block">
+                <table className="w-full min-w-[860px] text-sm">
                   <thead className="bg-gray-50 text-left">
                     <tr>
                       <th className="p-4">Servicio</th>
@@ -1033,13 +1117,13 @@ function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {services.length === 0 ? (
+                    {filteredServices.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="p-10 text-center text-gray-500">
-                          No hay servicios registrados todavía.
+                          {services.length === 0 ? 'No hay servicios registrados todavía.' : 'No hay servicios que coincidan con los filtros.'}
                         </td>
                       </tr>
-                    ) : services.map((service) => (
+                    ) : filteredServices.map((service) => (
                       <tr key={service.id} className="border-t align-middle">
                         <td className="p-4">
                           <p className="font-semibold text-gray-900">{service.name}</p>
@@ -1077,15 +1161,38 @@ function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+
+              <div className="space-y-3 lg:hidden">
+                {filteredServices.length === 0 ? (
+                  <EmptyState
+                    icon={<Boxes className="h-8 w-8" />}
+                    title="Sin servicios"
+                    description={services.length === 0 ? 'No hay servicios registrados todavía.' : 'No hay servicios que coincidan con los filtros.'}
+                  />
+                ) : filteredServices.map((service) => (
+                  <Card key={service.id}>
+                    <CardContent className="p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h2 className="font-bold text-academy-text">{service.name}</h2>
+                          <p className="mt-1 text-sm text-academy-text-muted">{categoryName(service.category_id ?? '')}</p>
+                        </div>
+                        <Badge variant={service.is_active ? 'success' : 'neutral'}>{getAdminServiceStatusLabel(service.is_active)}</Badge>
+                      </div>
+                      <p className="mt-4 line-clamp-3 text-sm text-academy-text-muted">{service.description || 'Sin descripción'}</p>
+                      <div className="mt-5 flex items-center justify-between gap-3">
+                        <p className="text-lg font-bold text-academy-text">{Number(service.price).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</p>
+                        <Button variant="secondary" size="sm" onClick={() => handleEditService(service)} disabled={savingId !== null} leadingIcon={<Pencil className="h-4 w-4" aria-hidden="true" />}>Editar</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </div>
           )}
 
           {tab === 'orders' && (
             <div className="space-y-5">
-              <div>
-                <h2 className="text-af-h2 text-academy-text">Órdenes</h2>
-                <p className="mt-1 text-academy-text-muted">Consulta pagos, servicios y transiciones operativas seguras.</p>
-              </div>
               <Card>
                 <CardContent>
                 <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(160px,1fr)_minmax(160px,1fr)_auto]">
@@ -1150,7 +1257,7 @@ function AdminDashboard() {
                 </CardContent>
               </Card>
 
-              <div className="overflow-x-auto rounded-xl border bg-white">
+              <div className="hidden overflow-x-auto rounded-af-lg border border-academy-border bg-white shadow-af-card lg:block">
                 <table className="w-full min-w-[850px] text-sm">
                   <thead className="bg-gray-50 text-left">
                     <tr>
@@ -1219,6 +1326,47 @@ function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+
+              <div className="space-y-3 lg:hidden">
+                {filteredOrders.length === 0 ? (
+                  <EmptyState icon={<PackageCheck className="h-8 w-8" />} title="Sin órdenes" description="No se encontraron órdenes con estos filtros." />
+                ) : filteredOrders.map((order) => (
+                  <Card key={order.id}>
+                    <CardContent className="p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-mono text-sm font-semibold">#{order.id.slice(0, 8)}</p>
+                          <p className="mt-1 text-xs text-academy-text-muted">{formatAdminDate(order.created_at)}</p>
+                        </div>
+                        <StatusBadge status={order.status} />
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-academy-text-muted">Servicios</p>
+                          <p className="mt-1 text-sm font-medium">{getOrderServiceSummary(order)}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-academy-border pt-3">
+                          <div className="flex items-center gap-2"><PaymentBadge status={order.payment_status} /><span className="font-bold">${Number(order.total_amount).toFixed(2)}</span></div>
+                          {getOrderTransitions(order.status).length > 0 ? (
+                            <select
+                              value={order.status}
+                              disabled={savingId === order.id}
+                              onChange={(event) => void handleOrderStatusSelection(order, event.target.value as Order['status'])}
+                              className="min-h-touch rounded-af-md border border-academy-border bg-academy-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary"
+                              aria-label={`Cambiar estado de la orden ${order.id.slice(0, 8)}`}
+                            >
+                              <option value={order.status} disabled>Cambiar estado…</option>
+                              {getOrderTransitions(order.status).map((transition) => (
+                                <option key={transition.value} value={transition.value}>{transition.label}</option>
+                              ))}
+                            </select>
+                          ) : <span className="text-xs text-academy-text-muted">Sin acciones</span>}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </div>
           )}
 
@@ -1243,6 +1391,29 @@ function AdminDashboard() {
                   </Button>
                 </div>
 
+                <div className="flex gap-1 overflow-x-auto border-b border-academy-border" role="tablist" aria-label="Vistas de credenciales">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={credentialView === 'inventory'}
+                    onClick={() => setCredentialView('inventory')}
+                    className={`min-h-touch whitespace-nowrap border-b-2 px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary ${credentialView === 'inventory' ? 'border-academy-primary text-academy-primary' : 'border-transparent text-academy-text-muted'}`}
+                  >
+                    Inventario
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={credentialView === 'audit'}
+                    onClick={() => setCredentialView('audit')}
+                    className={`min-h-touch whitespace-nowrap border-b-2 px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary ${credentialView === 'audit' ? 'border-academy-primary text-academy-primary' : 'border-transparent text-academy-text-muted'}`}
+                  >
+                    Auditoría
+                  </button>
+                </div>
+
+                {credentialView === 'inventory' && (
+                  <>
                 {revealError && <Alert variant="error" role="alert">{revealError}</Alert>}
 
                 {revealedCredential && (() => {
@@ -1339,7 +1510,8 @@ function AdminDashboard() {
                 ) : filteredCredentials.length === 0 ? (
                   <EmptyState icon={<KeyRound className="h-8 w-8" />} title="Sin coincidencias" description="No hay credenciales que coincidan con los filtros." />
                 ) : (
-                  <div className="overflow-x-auto rounded-xl border bg-white">
+                  <>
+                  <div className="hidden overflow-x-auto rounded-af-lg border border-academy-border bg-white shadow-af-card lg:block">
                     <table className="w-full min-w-[1180px] text-sm">
                       <thead className="bg-gray-50 text-left">
                         <tr>
@@ -1396,10 +1568,50 @@ function AdminDashboard() {
                       </tbody>
                     </table>
                   </div>
+                  <div className="space-y-3 lg:hidden">
+                    {filteredCredentials.map((credential) => {
+                      const lifecycle = getCredentialLifecycleState(credential);
+                      const revealable = canRevealCredential(credential);
+                      return (
+                        <Card key={credential.credentialId}>
+                          <CardContent className="p-5">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="font-mono text-xs text-academy-text-muted">Orden {shortId(credential.orderId)}</p>
+                                <h2 className="mt-1 font-bold text-academy-text">{credential.serviceName}</h2>
+                              </div>
+                              <CredentialLifecycleBadge state={lifecycle} />
+                            </div>
+                            <dl className="mt-4 space-y-2 border-t border-academy-border pt-4 text-xs text-academy-text-muted">
+                              <div><dt className="inline font-semibold">Credencial: </dt><dd className="inline font-mono">{shortId(credential.credentialId)}</dd></div>
+                              <div><dt className="inline font-semibold">Actualizada: </dt><dd className="inline">{formatAdminDate(credential.updatedAt)}</dd></div>
+                              <div><dt className="inline font-semibold">Expira: </dt><dd className="inline">{formatAdminDate(credential.expiresAt)}</dd></div>
+                            </dl>
+                            <Button
+                              className="mt-4 w-full"
+                              onClick={() => {
+                                setRevealError('');
+                                setPendingRevealCredential(credential);
+                              }}
+                              disabled={!revealable || revealLoadingId !== null}
+                              loading={revealLoadingId === credential.credentialId}
+                              leadingIcon={<Eye className="h-4 w-4" aria-hidden="true" />}
+                            >
+                              {revealable ? 'Revelar' : 'No disponible'}
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                  </>
+                )}
+                  </>
                 )}
               </section>
 
-              <section className="space-y-4 border-t pt-8">
+              {credentialView === 'audit' && (
+              <section className="space-y-4">
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">Auditoría de accesos</h2>
                   <p className="text-sm text-gray-600">
@@ -1463,7 +1675,8 @@ function AdminDashboard() {
                 ) : filteredCredentialAuditLogs.length === 0 ? (
                   <EmptyState icon={<History className="h-8 w-8" />} title="Sin coincidencias" description="No hay registros que coincidan con los filtros." />
                 ) : (
-                  <div className="overflow-x-auto rounded-xl border bg-white">
+                  <>
+                  <div className="hidden overflow-x-auto rounded-af-lg border border-academy-border bg-white shadow-af-card lg:block">
                     <table className="w-full min-w-[1180px] text-sm">
                       <thead className="bg-gray-50 text-left">
                         <tr>
@@ -1495,8 +1708,31 @@ function AdminDashboard() {
                       </tbody>
                     </table>
                   </div>
+                  <div className="space-y-3 lg:hidden">
+                    {filteredCredentialAuditLogs.map((entry) => (
+                      <Card key={entry.id}>
+                        <CardContent className="p-5">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-mono text-sm font-semibold text-academy-text">{entry.action}</p>
+                              <p className="mt-1 text-xs text-academy-text-muted">{formatAdminDate(entry.created_at)}</p>
+                            </div>
+                            <AuditOutcomeBadge success={entry.success} />
+                          </div>
+                          <dl className="mt-4 space-y-2 border-t border-academy-border pt-4 text-xs text-academy-text-muted">
+                            <div><dt className="inline font-semibold">Orden: </dt><dd className="inline font-mono">{shortId(entry.order_id)}</dd></div>
+                            <div><dt className="inline font-semibold">Credencial: </dt><dd className="inline font-mono">{shortId(entry.credential_id)}</dd></div>
+                            <div><dt className="inline font-semibold">Motivo: </dt><dd className="inline">{entry.reason_code ?? '—'}</dd></div>
+                            <div><dt className="inline font-semibold">Request: </dt><dd className="inline font-mono">{shortId(entry.request_id)}</dd></div>
+                          </dl>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                  </>
                 )}
               </section>
+              )}
             </div>
           )}
 
@@ -1506,10 +1742,6 @@ function AdminDashboard() {
 
           {tab === 'support' && (
             <div className="space-y-5">
-              <div>
-                <h2 className="text-af-h2 text-academy-text">Soporte</h2>
-                <p className="mt-1 text-academy-text-muted">Consulta mensajes, responde y actualiza su estado operativo.</p>
-              </div>
               <Card>
                 <CardContent>
                 <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_auto]">
@@ -1566,63 +1798,93 @@ function AdminDashboard() {
                     ? 'No hay mensajes de soporte.'
                     : 'No se encontraron mensajes con estos filtros.'}
                 />
-              ) : filteredMessages.map((message) => (
-                <Card key={message.id}>
-                  <article className="p-5 sm:p-6">
-                  <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-                    <div>
-                      <h2 className="font-bold">{message.user_name}</h2>
-                      <p className="text-sm text-gray-500">{message.user_email}</p>
-                      <p className="mt-1 text-xs text-gray-500">
-                        {message.user_id ? `Usuario #${message.user_id.slice(0, 8)}` : 'Mensaje de invitado'}
-                        {' · '}
-                        {new Date(message.created_at).toLocaleString('es-MX')}
-                      </p>
+              ) : (
+                <div className="grid min-w-0 gap-4 lg:grid-cols-[390px_minmax(0,1fr)]">
+                  <Card className="overflow-hidden">
+                    <div className="border-b border-academy-border px-5 py-4">
+                      <h2 className="font-bold text-academy-text">Bandeja de soporte</h2>
+                      <p className="mt-1 text-xs text-academy-text-muted">Selecciona un mensaje para ver el detalle.</p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <SupportStatusBadge status={message.status} />
-                      <label className="sr-only" htmlFor={`support-status-${message.id}`}>
-                        Estado del mensaje de {message.user_name}
-                      </label>
-                      <select
-                        id={`support-status-${message.id}`}
-                        value={message.status}
-                        disabled={savingId === message.id}
-                        onChange={(event) => void handleSupportStatusChange(
-                          message,
-                          event.target.value as SupportMessage['status'],
-                        )}
-                        className="min-h-touch rounded-af-md border border-academy-border bg-academy-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary disabled:opacity-50"
-                      >
-                        <option value="pending">Pendiente</option>
-                        <option value="in_progress">En proceso</option>
-                        <option value="resolved">Resuelto</option>
-                      </select>
+                    <div className="max-h-[680px] divide-y divide-academy-border overflow-y-auto">
+                      {filteredMessages.map((message) => {
+                        const selected = selectedSupportMessage?.id === message.id;
+                        return (
+                          <button
+                            key={message.id}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => setSelectedSupportId(message.id)}
+                            className={`w-full px-5 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-academy-primary ${selected ? 'bg-blue-50' : 'hover:bg-academy-subtle'}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-bold text-academy-text">{message.user_name}</span>
+                                <span className="mt-1 block truncate text-xs text-academy-text-muted">{message.user_email}</span>
+                              </span>
+                              <SupportStatusBadge status={message.status} />
+                            </div>
+                            <span className="mt-3 block line-clamp-2 text-sm text-academy-text-muted">{message.message}</span>
+                            <span className="mt-2 block text-xs text-academy-text-muted">{formatAdminDate(message.created_at)}</span>
+                          </button>
+                        );
+                      })}
                     </div>
-                  </div>
-                  <p className="mb-4 whitespace-pre-wrap rounded-af-md bg-blue-50 p-4 text-academy-text">{message.message}</p>
-                  <Textarea
-                    label={`Respuesta para ${message.user_name}`}
-                    value={responseDrafts[message.id] ?? ''}
-                    onChange={(event) => setResponseDrafts((current) => ({ ...current, [message.id]: event.target.value }))}
-                    placeholder="Respuesta del administrador"
-                  />
-                  <Button
-                    className="mt-3"
-                    onClick={() => void handleSupportResponse(message)}
-                    loading={savingId === message.id}
-                    leadingIcon={<Save className="h-4 w-4" aria-hidden="true" />}
-                  >
-                    Guardar respuesta y resolver
-                  </Button>
-                  </article>
-                </Card>
-              ))}
+                  </Card>
+
+                  {selectedSupportMessage && (
+                    <Card>
+                      <article className="p-5 sm:p-6">
+                        <div className="flex flex-col gap-4 border-b border-academy-border pb-5 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <h2 className="text-lg font-bold text-academy-text">{selectedSupportMessage.user_name}</h2>
+                            <p className="text-sm text-academy-text-muted">{selectedSupportMessage.user_email}</p>
+                            <p className="mt-1 text-xs text-academy-text-muted">
+                              {selectedSupportMessage.user_id ? `Usuario #${selectedSupportMessage.user_id.slice(0, 8)}` : 'Mensaje de invitado'}
+                              {' · '}
+                              {formatAdminDate(selectedSupportMessage.created_at)}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <SupportStatusBadge status={selectedSupportMessage.status} />
+                            <label className="sr-only" htmlFor={`support-status-${selectedSupportMessage.id}`}>Estado del mensaje de {selectedSupportMessage.user_name}</label>
+                            <select
+                              id={`support-status-${selectedSupportMessage.id}`}
+                              value={selectedSupportMessage.status}
+                              disabled={savingId === selectedSupportMessage.id}
+                              onChange={(event) => void handleSupportStatusChange(selectedSupportMessage, event.target.value as SupportMessage['status'])}
+                              className="min-h-touch rounded-af-md border border-academy-border bg-academy-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary disabled:opacity-50"
+                            >
+                              <option value="pending">Pendiente</option>
+                              <option value="in_progress">En proceso</option>
+                              <option value="resolved">Resuelto</option>
+                            </select>
+                          </div>
+                        </div>
+                        <p className="my-5 whitespace-pre-wrap rounded-af-md bg-blue-50 p-4 text-academy-text">{selectedSupportMessage.message}</p>
+                        <Textarea
+                          label={`Respuesta para ${selectedSupportMessage.user_name}`}
+                          value={responseDrafts[selectedSupportMessage.id] ?? ''}
+                          onChange={(event) => setResponseDrafts((current) => ({ ...current, [selectedSupportMessage.id]: event.target.value }))}
+                          placeholder="Respuesta del administrador"
+                        />
+                        <Button
+                          className="mt-3 w-full sm:w-auto"
+                          onClick={() => void handleSupportResponse(selectedSupportMessage)}
+                          loading={savingId === selectedSupportMessage.id}
+                          leadingIcon={<Save className="h-4 w-4" aria-hidden="true" />}
+                        >
+                          Guardar respuesta y resolver
+                        </Button>
+                      </article>
+                    </Card>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </>
       )}
-      </div>
+      </section>
 
       {pendingRevealCredential && (
         <Modal
@@ -1815,7 +2077,8 @@ function AdminDashboard() {
           {cancellationError && <Alert className="mt-4" variant="error" role="alert">{cancellationError}</Alert>}
         </Modal>
       )}
-    </div>
+      </div>
+    </AdminShell>
   );
 }
 
