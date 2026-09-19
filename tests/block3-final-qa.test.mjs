@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const readSource = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const headerSource = readSource('src/components/Header.tsx');
+const headerNavigationSource = readSource('src/components/header/HeaderNavigation.tsx');
 const homeSource = readSource('src/pages/Home.tsx');
 const modalSource = readSource('src/components/ui/Modal.tsx');
 
@@ -16,7 +17,8 @@ test('mobile navigation reuses the accessible Drawer behavior', () => {
   assert.match(headerSource, /<Drawer[\s\S]*?open=\{mobileMenuOpen\}[\s\S]*?onClose=/);
   assert.match(headerSource, /aria-controls="mobile-navigation"/);
   assert.match(headerSource, /aria-haspopup="dialog"/);
-  assert.match(headerSource, /<nav id="mobile-navigation" aria-label="Navegación móvil">/);
+  assert.match(headerSource, /<MobileNavigation/);
+  assert.match(headerNavigationSource, /<nav id="mobile-navigation" aria-label="Navegación móvil">/);
 });
 
 test('the final Home CTA keeps visible text and the existing catalog navigation', () => {
