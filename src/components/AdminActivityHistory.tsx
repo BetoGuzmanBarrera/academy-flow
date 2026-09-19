@@ -30,6 +30,7 @@ const HISTORY_LIMIT = 100;
 const ORDER_STATUSES: Order['status'][] = ['pending', 'in_progress', 'completed', 'cancelled'];
 
 export function AdminActivityHistory() {
+  const [view, setView] = useState<'activity' | 'orders'>('activity');
   const [activityLogs, setActivityLogs] = useState<AdminActivityLogEntry[]>([]);
   const [orderHistory, setOrderHistory] = useState<OrderStatusHistoryEntry[]>([]);
   const [activityFilters, setActivityFilters] = useState<AdminActivityFilters>(emptyAdminActivityFilters);
@@ -113,7 +114,6 @@ export function AdminActivityHistory() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Badge variant="primary">Solo lectura</Badge>
-          <h2 className="mt-3 text-af-h2 text-academy-text">Actividad y trazabilidad</h2>
           <p className="mt-1 text-af-body-sm text-academy-text-muted">
             Consulta de solo lectura protegida por las policies de administrador y AAL2.
           </p>
@@ -132,6 +132,16 @@ export function AdminActivityHistory() {
         Mostrando los 100 registros más recientes por sección.
       </Alert>
 
+      <div className="flex gap-1 overflow-x-auto border-b border-academy-border" role="tablist" aria-label="Tipos de actividad">
+        <button type="button" role="tab" aria-selected={view === 'activity'} onClick={() => setView('activity')} className={`min-h-touch whitespace-nowrap border-b-2 px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary ${view === 'activity' ? 'border-academy-primary text-academy-primary' : 'border-transparent text-academy-text-muted'}`}>
+          Actividad administrativa
+        </button>
+        <button type="button" role="tab" aria-selected={view === 'orders'} onClick={() => setView('orders')} className={`min-h-touch whitespace-nowrap border-b-2 px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-academy-primary ${view === 'orders' ? 'border-academy-primary text-academy-primary' : 'border-transparent text-academy-text-muted'}`}>
+          Historial de órdenes
+        </button>
+      </div>
+
+      {view === 'activity' && (
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <ScrollText size={20} className="text-blue-600" />
@@ -192,7 +202,8 @@ export function AdminActivityHistory() {
         ) : filteredActivity.length === 0 ? (
           <UiEmptyState icon={<History className="h-8 w-8" />} title="Sin coincidencias" description="No hay actividad que coincida con los filtros." />
         ) : (
-          <div className="overflow-x-auto rounded-xl border bg-white">
+          <>
+          <div className="hidden overflow-x-auto rounded-af-lg border border-academy-border bg-white shadow-af-card lg:block">
             <table className="w-full min-w-[980px] text-sm">
               <thead className="bg-gray-50 text-left">
                 <tr>
@@ -235,10 +246,37 @@ export function AdminActivityHistory() {
               </tbody>
             </table>
           </div>
+          <div className="space-y-3 lg:hidden">
+            {filteredActivity.map((entry) => {
+              const safeMetadata = getSafeAdminMetadata(entry.details);
+              return (
+                <Card key={entry.id}>
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div><CodeBadge value={entry.action} /><p className="mt-2 text-xs text-academy-text-muted">{formatDate(entry.created_at)}</p></div>
+                      <span className="font-mono text-xs text-academy-text-muted">{shortId(entry.admin_id)}</span>
+                    </div>
+                    <div className="mt-4 border-t border-academy-border pt-4">
+                      <p className="font-semibold text-academy-text">{entry.target_table}</p>
+                      <p className="mt-1 font-mono text-xs text-academy-text-muted">{shortId(entry.target_id)}</p>
+                      {safeMetadata.length > 0 && (
+                        <dl className="mt-3 space-y-1 text-xs text-academy-text-muted">
+                          {safeMetadata.map((item) => <div key={item.label}><dt className="inline font-semibold">{item.label}: </dt><dd className="inline break-words">{item.value}</dd></div>)}
+                        </dl>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+          </>
         )}
       </section>
+      )}
 
-      <section className="space-y-4 border-t pt-8">
+      {view === 'orders' && (
+      <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Clock3 size={20} className="text-blue-600" />
           <h3 className="text-lg font-bold text-gray-900">Historial de órdenes</h3>
@@ -298,7 +336,8 @@ export function AdminActivityHistory() {
         ) : filteredOrderHistory.length === 0 ? (
           <UiEmptyState icon={<Clock3 className="h-8 w-8" />} title="Sin coincidencias" description="No hay transiciones que coincidan con los filtros." />
         ) : (
-          <div className="overflow-x-auto rounded-xl border bg-white">
+          <>
+          <div className="hidden overflow-x-auto rounded-af-lg border border-academy-border bg-white shadow-af-card lg:block">
             <table className="w-full min-w-[820px] text-sm">
               <thead className="bg-gray-50 text-left">
                 <tr>
@@ -326,8 +365,28 @@ export function AdminActivityHistory() {
               </tbody>
             </table>
           </div>
+          <div className="space-y-3 lg:hidden">
+            {filteredOrderHistory.map((entry) => (
+              <Card key={entry.id}>
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-mono text-sm font-semibold">Orden {shortId(entry.order_id)}</p>
+                    <p className="text-xs text-academy-text-muted">{formatDate(entry.created_at)}</p>
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-academy-border pt-4">
+                    <OrderHistoryStatusBadge status={entry.from_status} />
+                    <span aria-hidden="true" className="text-gray-400">→</span>
+                    <OrderHistoryStatusBadge status={entry.to_status} />
+                  </div>
+                  <p className="mt-3 text-xs text-academy-text-muted">Responsable: <span className="font-mono">{shortId(entry.changed_by)}</span></p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          </>
         )}
       </section>
+      )}
     </div>
   );
 }

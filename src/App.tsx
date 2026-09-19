@@ -111,7 +111,7 @@ function App() {
       case 'policies':
         return <Policies />;
       case 'admin':
-        return <Admin />;
+        return <Admin onNavigate={handleNavigate} />;
       case 'account':
         return (
           <Account
@@ -128,29 +128,35 @@ function App() {
     <AuthProvider>
       <CartProvider>
         <div className="flex min-h-screen flex-col bg-academy-background">
-          <Header
-            onNavigate={handleNavigate}
-            currentPage={currentPage}
-            onOpenCart={() => setIsCartOpen(true)}
-            onOpenAuth={() => setIsAuthModalOpen(true)}
-            onOpenChangePassword={() => setIsChangePasswordOpen(true)}
-            onNavigateToHomeSection={handleNavigateToHomeSection}
-          />
+          {currentPage !== 'admin' && (
+            <Header
+              onNavigate={handleNavigate}
+              currentPage={currentPage}
+              onOpenCart={() => setIsCartOpen(true)}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
+              onOpenChangePassword={() => setIsChangePasswordOpen(true)}
+              onNavigateToHomeSection={handleNavigateToHomeSection}
+            />
+          )}
 
           <main className="flex-1">
             {renderPage()}
           </main>
 
-          <Footer
-            onNavigate={handleNavigate}
-            onNavigateToHomeSection={handleNavigateToHomeSection}
-          />
+          {currentPage !== 'admin' && (
+            <Footer
+              onNavigate={handleNavigate}
+              onNavigateToHomeSection={handleNavigateToHomeSection}
+            />
+          )}
 
-          <Cart
-            isOpen={isCartOpen}
-            onClose={() => setIsCartOpen(false)}
-            onCheckout={handleCheckout}
-          />
+          {currentPage !== 'admin' && (
+            <Cart
+              isOpen={isCartOpen}
+              onClose={() => setIsCartOpen(false)}
+              onCheckout={handleCheckout}
+            />
+          )}
 
           <AuthModal
             isOpen={isAuthModalOpen}
@@ -162,7 +168,7 @@ function App() {
             onClose={() => setIsChangePasswordOpen(false)}
           />
 
-          <SupportChat />
+          {currentPage !== 'admin' && <SupportChat />}
         </div>
       </CartProvider>
     </AuthProvider>
