@@ -69,6 +69,13 @@ test('SupportChat clears a stale error before loading message history again', ()
   );
 });
 
+test('SupportChat labels only the matching authenticated author as Tú', () => {
+  assert.match(supportSource,
+    /userId\s*&&\s*msg\.user_id\s*===\s*userId\s*\?\s*['"]Tú['"]/);
+  assert.match(supportSource, /Invitado\s*·\s*\$\{msg\.user_name\}/);
+  assert.doesNotMatch(supportSource, /user\s*\?\s*['"]Tú['"]\s*:/);
+});
+
 test('SupportChat preserves the secure Edge Function and exact guest/auth payloads', () => {
   assert.match(supportSource, /supabase\.functions\.invoke<[\s\S]*?>\(['"]send-support-message['"]/);
   assert.match(supportSource, /\?\s*\{\s*message:\s*newMessage\s*\}/);

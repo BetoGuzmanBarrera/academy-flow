@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.3.1';
 import { getCorsHeaders, handleOptions } from '../_shared/cors.ts';
+import { createAcademyCheckoutSession } from '../_shared/checkoutSession.ts';
 
 const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
 
@@ -57,7 +58,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: order, error: orderError } = await adminClient
       .from('orders')
-      .select('id, user_id, total_amount, payment_status, stripe_checkout_session_id')
+      .select('id, user_id, total_amount, status, payment_status, stripe_checkout_session_id')
       .eq('id', orderId)
       .maybeSingle();
 
@@ -70,8 +71,8 @@ Deno.serve(async (req: Request) => {
       return jsonError('Order not found', 404, origin);
     }
 
-    // ── Only allow pending or failed orders ──────────────────────────
-    if (!['pending', 'failed'].includes(order.payment_status)) {
+    // Fulfillment cancellation is terminal, regardless of payment state.
+    if (order.status === 'cancelled' || !['pending', 'failed'].includes(order.payment_status)) {
       return jsonError('This order cannot be paid in its current state', 409, origin);
     }
 
@@ -111,6 +112,13 @@ Deno.serve(async (req: Request) => {
         if (!existingSessionUrl) {
           return jsonError('Payment session is temporarily unavailable. Try again.', 503, origin);
         }
+        const { data: mayReuse, error: reuseError } = await adminClient.rpc(
+          'can_reuse_stripe_checkout_session_secure',
+          { p_order_id: orderId, p_user_id: userId, p_session_id: existingSession.id },
+        );
+        if (reuseError || !mayReuse) {
+          return jsonError('This order cannot be paid in its current state', 409, origin);
+        }
         return new Response(
           JSON.stringify({ sessionUrl: existingSessionUrl }),
           {
@@ -129,18 +137,38 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const newSession = await createNewSession(
+    const siteUrl = Deno.env.get('SITE_URL') || 'https://academy-flow-mx.bolt.host';
+    if (!getValidCheckoutUrl(siteUrl)) {
+      return jsonError('Payment system is not configured. Contact support.', 503, origin);
+    }
+    const { data: reservationKey, error: reservationError } = await adminClient.rpc(
+      'reserve_stripe_checkout_session_secure',
+      {
+        p_order_id: orderId, p_user_id: userId,
+        p_previous_session_id: order.stripe_checkout_session_id,
+        p_amount: amountInCents, p_site_url: siteUrl,
+      },
+    );
+    if (reservationError || typeof reservationKey !== 'string') {
+      return jsonError('This order cannot be paid in its current state', 409, origin);
+    }
+
+    const newSession = await createAcademyCheckoutSession(
       stripe,
       orderId,
       userId,
       amountInCents,
-      order.stripe_checkout_session_id,
+      siteUrl,
+      reservationKey,
     );
     const sessionUrl = getValidCheckoutUrl(newSession.url);
     if (!sessionUrl) {
       throw new Error('Stripe returned a Checkout Session without a valid URL');
     }
-    await saveSessionId(adminClient, orderId, newSession.id);
+    const saved = await saveSessionId(adminClient, orderId, userId, reservationKey, newSession.id);
+    if (!saved) {
+      return jsonError('This order cannot be paid in its current state', 409, origin);
+    }
 
     return new Response(
       JSON.stringify({ sessionUrl }),
@@ -154,53 +182,6 @@ Deno.serve(async (req: Request) => {
     return jsonError('Could not start payment session. Try again.', 500, origin);
   }
 });
-
-async function createNewSession(
-  stripe: Stripe,
-  orderId: string,
-  userId: string,
-  amountInCents: number,
-  previousSessionId: string | null,
-): Promise<Stripe.Checkout.Session> {
-  const siteUrl = Deno.env.get('SITE_URL') || 'https://academy-flow-mx.bolt.host';
-
-  return stripe.checkout.sessions.create({
-    mode: 'payment',
-    currency: 'mxn',
-    line_items: [
-      {
-        quantity: 1,
-        price_data: {
-          currency: 'mxn',
-          unit_amount: amountInCents,
-          product_data: {
-            name: `Orden #${orderId.slice(0, 8)}`,
-          },
-        },
-      },
-    ],
-    metadata: {
-      order_id: orderId,
-      user_id: userId,
-    },
-    payment_intent_data: {
-      metadata: {
-        order_id: orderId,
-      },
-    },
-    success_url: `${siteUrl}/?payment=success&order=${orderId}`,
-    cancel_url: `${siteUrl}/?payment=cancelled&order=${orderId}`,
-  }, {
-    idempotencyKey: getCheckoutSessionIdempotencyKey(orderId, previousSessionId),
-  });
-}
-
-function getCheckoutSessionIdempotencyKey(
-  orderId: string,
-  previousSessionId: string | null,
-): string {
-  return `checkout-session:${orderId}:${previousSessionId ?? 'initial'}`;
-}
 
 function getValidCheckoutUrl(value: string | null): string | null {
   if (!value) return null;
@@ -216,15 +197,20 @@ function getValidCheckoutUrl(value: string | null): string | null {
 async function saveSessionId(
   adminClient: SupabaseClient,
   orderId: string,
+  userId: string,
+  reservationKey: string,
   sessionId: string,
-): Promise<void> {
-  const { error } = await adminClient
-    .from('orders')
-    .update({ stripe_checkout_session_id: sessionId, updated_at: new Date().toISOString() })
-    .eq('id', orderId);
+): Promise<boolean> {
+  const { data, error } = await adminClient.rpc('record_stripe_checkout_session_secure', {
+    p_order_id: orderId,
+    p_user_id: userId,
+    p_key: reservationKey,
+    p_session_id: sessionId,
+  });
 
   if (error) {
     console.error('Failed to save checkout session ID:', error.code);
     throw new Error('Failed to save checkout session ID');
   }
+  return data === true;
 }

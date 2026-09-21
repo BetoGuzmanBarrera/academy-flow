@@ -78,7 +78,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Process event ─────────────────────────────────────────────────
-    if (event.type === 'checkout.session.completed') {
+    if (event.type === 'checkout.session.completed'
+        || event.type === 'checkout.session.async_payment_succeeded') {
       const session = event.data.object as Stripe.Checkout.Session;
 
       // Only process one-time payments
@@ -121,10 +122,13 @@ Deno.serve(async (req: Request) => {
         .eq('id', orderId)
         .maybeSingle();
 
-      if (orderError || !order) {
-        console.error('Order not found for event:', event.id);
-        await recordEvent(adminClient, event.id, event.type);
-        return jsonError('Order not found', 404);
+      if (orderError) {
+        console.error('Order lookup failed for event:', orderError.code);
+        return jsonError('Webhook processing failed', 500);
+      }
+      if (!order) {
+        console.error('Order missing for event:', event.id);
+        return jsonError('Order not found', 500);
       }
 
       const dbAmountCents = Math.round(Number(order.total_amount) * 100);
@@ -155,6 +159,7 @@ Deno.serve(async (req: Request) => {
           p_order_id: orderId,
           p_payment_id: paymentIntentId,
           p_checkout_session_id: session.id,
+          p_reservation_key: session.metadata?.checkout_reservation_key ?? null,
         },
       );
 
@@ -171,12 +176,14 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      if (processingResult !== 'processed') {
+      if (processingResult !== 'processed' && processingResult !== 'refund_queued') {
         console.error('Unexpected Stripe processing result');
         return jsonError('Webhook processing failed', 500);
       }
 
-      return new Response(JSON.stringify({ received: true, processed: true }), {
+      return new Response(JSON.stringify(processingResult === 'refund_queued'
+        ? { received: true, processed: true, reconciliationQueued: true }
+        : { received: true, processed: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', ...getCorsHeaders(null) },
       });

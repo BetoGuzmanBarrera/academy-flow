@@ -566,11 +566,13 @@ test('rate limiter is atomic and callable only by service_role', () => {
   );
 });
 
-test('only send-support-message disables gateway JWT verification', () => {
+test('only intentionally externally-authenticated functions disable gateway JWT verification', () => {
   const config = readFileSync(new URL('../../config.toml', import.meta.url), 'utf8');
   const disabledFunctions = [...config.matchAll(
     /^\[functions\.([^\]]+)\]\s*\r?\nverify_jwt\s*=\s*false\s*$/gm,
   )].map((match) => match[1]);
 
-  assert.deepEqual(disabledFunctions, ['send-support-message', 'stripe-webhook']);
+  assert.deepEqual(disabledFunctions, [
+    'send-support-message', 'stripe-webhook', 'reconcile-stripe-payments',
+  ]);
 });

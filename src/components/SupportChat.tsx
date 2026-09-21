@@ -212,7 +212,9 @@ export function SupportChat() {
                 return (
                   <article key={msg.id} className="rounded-af-md border border-academy-border bg-academy-background p-4">
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <p className="font-semibold text-academy-text">{user ? 'Tú' : msg.user_name}</p>
+                      <p className="font-semibold text-academy-text">
+                        {userId && msg.user_id === userId ? 'Tú' : `Invitado · ${msg.user_name}`}
+                      </p>
                       <Badge variant={status.variant}>{status.label}</Badge>
                     </div>
                     <p className="mt-2 whitespace-pre-wrap break-words text-af-body-sm text-academy-text">{msg.message}</p>
