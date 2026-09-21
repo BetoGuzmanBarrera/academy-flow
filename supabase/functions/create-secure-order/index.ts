@@ -209,7 +209,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const paymentMethod = body.paymentMethod;
-    const referralCode = body.referralCode ?? null;
+    if (body.referralCode != null && typeof body.referralCode !== 'string') {
+      return diagnosticError('validation', null, 'Invalid referral code', origin);
+    }
+    const referralCode = body.referralCode?.trim() || null;
     const rawCredentials: RawCredential[] = body.credentials ?? [];
     const billing = body.billing ?? null;
 
@@ -223,6 +226,24 @@ Deno.serve(async (req: Request) => {
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
     });
+
+    if (referralCode) {
+      const { data: referral, error: referralError } = await adminClient.rpc(
+        'prepare_referral_code_secure',
+        { p_user_id: userId, p_code: referralCode },
+      ).single();
+
+      if (referralError) {
+        return diagnosticError('validation', referralError.code ?? null, referralError.message, origin);
+      }
+      if (!referral?.valid || referral.self_use) {
+        return diagnosticError(
+          'validation', 'P0001',
+          referral?.self_use ? 'No puedes usar tu propio código de referido' : 'Código de referido inválido',
+          origin,
+        );
+      }
+    }
 
     const serviceIds = rawCredentials.map((c) => c.service_id).filter(Boolean);
     if (serviceIds.length !== rawCredentials.length) {

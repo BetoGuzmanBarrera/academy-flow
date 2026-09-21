@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
 
@@ -70,6 +71,7 @@ const baseOrder = {
   id: 'order-123',
   user_id: 'user-123',
   total_amount: '125.49',
+  status: 'pending',
   payment_status: 'pending',
   stripe_checkout_session_id: null,
 };
@@ -80,6 +82,7 @@ function createHarness({
   existingSessions = {},
   deferCreates = false,
   saveErrors = [],
+  cancelDuringCreate = false,
 } = {}) {
   const state = {
     order: { ...order },
@@ -91,6 +94,7 @@ function createHarness({
   const sessions = new Map(Object.entries(existingSessions));
   const idempotentCreates = new Map();
   const pendingSaveErrors = [...saveErrors];
+  const reservations = new Map();
   let releaseCreates = () => {};
   const createGate = deferCreates
     ? new Promise((resolve) => {
@@ -108,6 +112,33 @@ function createHarness({
   };
 
   const adminClient = {
+    async rpc(name, args) {
+      if (name === 'reserve_stripe_checkout_session_secure') {
+        if (state.order.status === 'cancelled'
+            || state.order.stripe_checkout_session_id !== args.p_previous_session_id) {
+          return { data: null, error: { code: 'conflict' } };
+        }
+        const key = `checkout-session:${args.p_order_id}:${args.p_previous_session_id ?? 'initial'}`;
+        reservations.set(key, args.p_previous_session_id);
+        return { data: key, error: null };
+      }
+      if (name === 'can_reuse_stripe_checkout_session_secure') {
+        return { data: state.order.status !== 'cancelled'
+          && state.order.stripe_checkout_session_id === args.p_session_id,
+        error: null };
+      }
+      if (name === 'record_stripe_checkout_session_secure') {
+        state.updateCalls.push({ orderId: args.p_order_id, sessionId: args.p_session_id });
+        const error = pendingSaveErrors.shift() ?? null;
+        if (error) return { data: null, error };
+        const allowed = state.order.status !== 'cancelled'
+          && (state.order.stripe_checkout_session_id === reservations.get(args.p_key)
+            || state.order.stripe_checkout_session_id === args.p_session_id);
+        if (allowed) state.order.stripe_checkout_session_id = args.p_session_id;
+        return { data: allowed, error: null };
+      }
+      throw new Error(`Unexpected RPC: ${name}`);
+    },
     from(table) {
       assert.equal(table, 'orders');
       let operation;
@@ -171,6 +202,7 @@ function createHarness({
                 url: `https://checkout.stripe.com/c/pay/created-${sequence}`,
               };
               sessions.set(session.id, session);
+              if (cancelDuringCreate) state.order.status = 'cancelled';
               return { ...session };
             })());
           }
@@ -227,6 +259,31 @@ test('creates a normal session from the database amount and saves it', async () 
     'checkout-session:order-123:initial',
   );
   assert.equal(state.order.stripe_checkout_session_id, 'cs_created_1');
+});
+
+test('a cancelled order never creates or reuses Checkout', async () => {
+  const { state } = createHarness({
+    order: { ...baseOrder, status: 'cancelled', stripe_checkout_session_id: 'cs_open' },
+    existingSessions: {
+      cs_open: { id: 'cs_open', status: 'open',
+        url: 'https://checkout.stripe.com/c/pay/old' },
+    },
+  });
+  const result = await responseBody(await checkoutHandler(requestFor()));
+  assert.equal(result.status, 409);
+  assert.equal('sessionUrl' in result.body, false);
+  assert.equal(state.retrieveCalls.length, 0);
+  assert.equal(state.createCalls.length, 0);
+});
+
+test('cancellation after Stripe creates a session suppresses its URL', async () => {
+  const { state } = createHarness({ cancelDuringCreate: true });
+  const result = await responseBody(await checkoutHandler(requestFor()));
+  assert.equal(result.status, 409);
+  assert.equal('sessionUrl' in result.body, false);
+  assert.equal(state.resourcesCreated, 1);
+  assert.equal(state.order.status, 'cancelled');
+  assert.equal(state.order.stripe_checkout_session_id, null);
 });
 
 test('two concurrent attempts for the same order resolve to one Stripe session', async () => {
@@ -432,4 +489,33 @@ test('preserves the MXN 10 minimum before contacting Stripe', async () => {
 
   assert.equal(result.status, 400);
   assert.equal(state.createCalls.length, 0);
+});
+
+test('checkout SECURITY DEFINER RPCs grant EXECUTE only to service_role', () => {
+  const migration = readFileSync(new URL(
+    '../../migrations/20260920202400_stripe_financial_reconciliation.sql',
+    import.meta.url,
+  ), 'utf8');
+  const signatures = [
+    'reserve_stripe_checkout_session_secure(uuid, uuid, text, integer, text)',
+    'record_stripe_checkout_session_secure(uuid, uuid, text, text)',
+    'can_reuse_stripe_checkout_session_secure(uuid, uuid, text)',
+  ];
+
+  for (const signature of signatures) {
+    const name = signature.slice(0, signature.indexOf('('));
+    const functionStart = migration.indexOf(`CREATE FUNCTION public.${name}(`);
+    assert.notEqual(functionStart, -1, `${name} must be defined`);
+    const bodyEnd = migration.indexOf('$$;', functionStart);
+    assert.match(migration.slice(functionStart, bodyEnd), /SECURITY DEFINER/);
+    const statements = migration.split(/\r?\n/)
+      .filter((line) => /^(?:REVOKE|GRANT) EXECUTE ON FUNCTION /.test(line)
+        && line.includes(`public.${signature} `));
+    assert.deepEqual(statements, [
+      `REVOKE EXECUTE ON FUNCTION public.${signature} FROM PUBLIC;`,
+      `REVOKE EXECUTE ON FUNCTION public.${signature} FROM anon;`,
+      `REVOKE EXECUTE ON FUNCTION public.${signature} FROM authenticated;`,
+      `GRANT EXECUTE ON FUNCTION public.${signature} TO service_role;`,
+    ], `${name} must have exactly the intended EXECUTE statements`);
+  }
 });

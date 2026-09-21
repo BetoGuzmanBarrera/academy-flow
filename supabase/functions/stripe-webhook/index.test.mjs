@@ -89,6 +89,7 @@ function createHarness({
     total_amount: '125.49',
     payment_status: 'pending',
   },
+  orderError = null,
   rpcResults = [{ data: 'processed', error: null }],
   recordError = null,
 } = {}) {
@@ -145,7 +146,7 @@ function createHarness({
           },
           async maybeSingle() {
             state.orderReads += 1;
-            return { data: order, error: order ? null : { code: 'not_found' } };
+            return { data: order, error: orderError };
           },
         };
       }
@@ -261,8 +262,27 @@ test('returns processed only after the atomic checkout RPC succeeds', async () =
       p_order_id: checkoutEvent.data.object.metadata.order_id,
       p_payment_id: checkoutEvent.data.object.payment_intent,
       p_checkout_session_id: checkoutEvent.data.object.id,
+      p_reservation_key: null,
     },
   }]);
+  assert.equal(state.eventInserts.length, 0);
+});
+
+test('a cancelled-order payment is acknowledged only after durable refund work', async () => {
+  const state = createHarness({ rpcResults: [{ data: 'refund_queued', error: null }] });
+  const result = await responseBody(await webhookHandler(requestFor()));
+  assert.deepEqual(result, { status: 200, body: {
+    received: true, processed: true, reconciliationQueued: true,
+  } });
+  assert.equal(state.rpcCalls.length, 1);
+  assert.equal(state.eventInserts.length, 0);
+});
+
+test('a transient order lookup failure leaves the event retryable', async () => {
+  const state = createHarness({ orderError: { code: 'connection_failure' } });
+  const result = await responseBody(await webhookHandler(requestFor()));
+  assert.equal(result.status, 500);
+  assert.equal(state.rpcCalls.length, 0);
   assert.equal(state.eventInserts.length, 0);
 });
 
